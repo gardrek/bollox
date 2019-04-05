@@ -56,7 +56,11 @@ impl<'a> SourceLocation<'a> {
 use std::fmt;
 impl<'a> fmt::Display for SourceLocation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "  --> {} {}:{}", self.file_path, self.line_number, self.column)
+        write!(
+            f,
+            "  --> {} {}:{}",
+            self.file_path, self.line_number, self.column
+        )
     }
 }
 

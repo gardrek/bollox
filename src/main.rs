@@ -17,8 +17,9 @@ use std::io::Write;
 
 type GenericResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-mod scanner;
+mod interpreter;
 mod result;
+mod scanner;
 
 fn run(source: &str) -> GenericResult {
     let sc = scanner::Scanner::new(source);
@@ -56,7 +57,7 @@ fn run_prompt() -> GenericResult {
 fn main() -> GenericResult {
     let args: Vec<String> = env::args().collect();
     let r: Result<_, Box<dyn std::error::Error>> = match args.len() {
-        1 => run_prompt(), // If no arguments, run interactively
+        1 => run_prompt(),                  // If no arguments, run interactively
         2 => run_file(Path::new(&args[1])), // If a filename is given, run it as a script
         //_ => Err(Error::Usage),                                      // Print usage
         _ => Err(Box::new(result::Error::Usage)),
@@ -67,6 +68,6 @@ fn main() -> GenericResult {
         Err(e) => {
             println!("{}", e);
             Err(e)
-        },
+        }
     }
 }

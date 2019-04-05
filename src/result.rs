@@ -1,33 +1,37 @@
 use std::fmt;
+use std::io;
+
 //use super::scanner::SourceLocation;
 
-//pub type Result<T = ()> = std::result::Result<T, Box<Error>>;
+pub type Result<T = ()> = std::result::Result<T, Box<Error>>;
 
 #[derive(Debug)]
 pub enum Error {
-    None,
     Usage,
+    Io(io::Error),
     //SyntaxError(SourceLocation<'static>),
     //Other(Box<dyn std::error::Error>),
 }
 
 impl std::error::Error for Error {}
 
-impl std::default::Default for Error {
-    fn default() -> Self {
-        Error::None
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
-            None => write!(f, "Unkown Bollox Error"),
+            //None => write!(f, "Unkown Bollox Error"),
             Usage => write!(f, "Usage:\n    bollox <script>     Run a script\n    bollox              Run in interactive mode"),
+            Io(e) => write!(f, "{}", e),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),
             //Other(_) => write!(f, "{}", self),
         }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
+        // TODO: match on io::Error maybe?
+        Error::Io(error)
     }
 }
 
