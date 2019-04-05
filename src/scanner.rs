@@ -94,7 +94,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-impl<'a> Iterator for Scanner<'a> {
+impl<'a> Iterator for &mut Scanner<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {

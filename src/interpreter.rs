@@ -21,13 +21,21 @@ use std::io;
 use std::io::Write;
 
 pub struct Vm<'a> {
+    //source_box: Box<String>,
+    //source: String,
     // Needs a scanner so it can scan new lines of source in interactive mode
     scanner: Scanner<'a>,
 }
 
 impl<'a> Vm<'a> {
     fn from_source(source: &'a str) -> Self {
+        //let source_box = Box::new(source.to_string());
+        //let sc = Scanner::new(&source_box);
+        //let source: String = source.into();
+        //let sc = Scanner::new(&&source_box);
         Self {
+            //source_box,
+            //scanner: sc,
             scanner: Scanner::new(source),
         }
     }
@@ -38,8 +46,8 @@ impl<'a> Vm<'a> {
     //}
 
     fn run(&mut self) -> LoxResult {
-        let mut sc: &Scanner<'_> = &self.scanner;
-        for t in sc {
+        let sc = self.scanner;
+        for t in sc.iter() {
             eprintln!("{:?}", t);
         }
         //Err(Box::new(result::Error::Other(Box::new(io::Error::new(io::ErrorKind::Other, "ohnoes"))))
