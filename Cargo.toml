@@ -1,0 +1,7 @@
+[package]
+name = "bollox"
+version = "0.1.0"
+authors = ["gardrek <gardrek.the.destroyer@gmail.com>"]
+edition = "2018"
+
+[dependencies]
