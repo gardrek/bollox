@@ -3,7 +3,7 @@ use std::io;
 
 //use super::scanner::SourceLocation;
 
-pub type Result<T = ()> = std::result::Result<T, Box<Error>>;
+//pub type Result<T = ()> = std::result::Result<T, Box<Error>>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,7 +20,7 @@ impl fmt::Display for Error {
         use Error::*;
         match self {
             //None => write!(f, "Unkown Bollox Error"),
-            Usage => write!(f, "Usage:\n    bollox <script>     Run a script\n    bollox              Run in interactive mode"),
+            Usage => write!(f, "Usage:\n    bollox <script>     Run a Lox script\n    bollox              Run in interactive mode"),
             Io(e) => write!(f, "{}", e),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),
             //Other(_) => write!(f, "{}", self),
