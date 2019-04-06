@@ -3,7 +3,7 @@ use std::io;
 
 //use super::scanner::SourceLocation;
 
-//pub type Result<T = ()> = std::result::Result<T, Box<Error>>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {

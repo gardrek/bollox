@@ -38,7 +38,6 @@ fn main() -> GenericResult {
             Ok(())
         }
 
-        //2 => run_file(Path::new(&args[1])),
         _ => Err(result::Error::Usage),
     };
     match r {

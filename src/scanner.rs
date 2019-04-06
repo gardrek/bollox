@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::result::Result;
 
 #[derive(Debug)]
 pub struct Token {
@@ -20,13 +21,30 @@ impl fmt::Display for Token {
 
 #[derive(Debug, Clone)]
 pub enum TokenKind {
-    // Single-character tokens.
-    LeftParen,
-    //LeftParen, RightParen, LeftBrace, RightBrace,
-    //Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
+    // Single-character symbols.
+    LeftParen, RightParen, LeftBrace, RightBrace,
+    Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
+
+    // One or two character symbols.
+    Bang, BangEqual,
+    Equal, EqualEqual,
+    Greater, GreaterEqual,
+    Less, LessEqual,
+
+    /* 
+    // Literals.
+    Identifier, String, Number,
+
+    // Keywords.
+    And, Class, Else, False, Fun, For, If, Nil, Or,
+    Print, Return, Super, This, True, Var, While,
+    */
 
     //Literal(Literal),
     Eof,
+
+    //TODO: remove this and start using Result<Token>
+    SyntaxError,
 }
 
 /*
@@ -40,6 +58,25 @@ enum Literal {
 #[derive(Clone, Copy, Debug)]
 struct StringLiteralIndex;
 */
+
+
+
+/*
+enum TokenLength {
+    Fixed(usize),
+    //Max(usize),
+    //Min(usize),
+    //Range(usize, usize),
+    Unbounded,
+}
+
+fn token_length(kind: TokenKind) -> TokenLength {
+    
+}
+*/
+
+
+
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct SourceId(usize);
 
@@ -94,48 +131,135 @@ impl Scanner {
         }
     }
 
-    /*fn lookahead<'a>(&mut self, source: &'a str, len: usize) -> &'a str {
+    fn advance_byte<'a>(&mut self, store: &'a SourceStore) -> Option<u8> {
         let c = self.cursor;
-        &source[c..(c + len)]
-    }*/
-
-    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
-        let current = self.cursor;
-        let offset = current;
-        let length;
-        let total_length = store.len(self.source_id);
-
-        if current <= total_length {
-            let test_length = 1;
-            let kind;
-
-            //length = store.len(self.source_id);
-
-            self.cursor += test_length;
-
-            let slice = store.get_slice(self.source_id, current, total_length.saturating_sub(current));
-            if slice.len() != 0 {
-                length = 1;
-                kind = TokenKind::Eof;
-            } else {
-                length = 0;
-                kind = TokenKind::Eof;
-            }
-
-            let location = SourceLocation {
-                source_id: self.source_id,
-                offset,
-                length,
-            };
-            Some(Token {
-                location,
-                kind,
-            })
+        if c < store.len(self.source_id) {
+            self.cursor += 1;
+            Some(store.get_slice(self.source_id, c, 1).as_bytes()[0])
         } else {
             None
         }
     }
 
+    fn advance_matching_byte<'a>(&mut self, store: &'a SourceStore, m: u8) -> bool {
+        let c = self.cursor;
+        if c < store.len(self.source_id) {
+            let ch = store.get_slice(self.source_id, c, 1).as_bytes()[0];
+            if ch == m {
+                self.cursor += 1;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn lookahead<'a>(&mut self, store: &'a SourceStore, length: usize) -> Option<&'a str> {
+        let c = self.cursor;
+        if (c + length) < store.len(self.source_id) {
+            Some(store.get_slice(self.source_id, c, length))
+        } else {
+            None
+        }
+    }
+
+    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
+        let current = self.cursor;
+        let offset = current;
+        let total_length = store.len(self.source_id);
+
+        // If we are past the end
+        if current > total_length {
+            return None;
+        }
+
+        let length;
+        let kind;
+
+        if current < total_length {
+            if total_length.saturating_sub(current) == 0 {
+                panic!();
+            } else {
+                //let first = store.get_slice(self.source_id, current, 1);
+                let first = self.advance_byte(store).unwrap();
+
+                {
+                    use TokenKind::*;
+                    kind = match first {
+                        b'(' => LeftParen,
+                        b')' => RightParen,
+                        b'{' => LeftBrace,
+                        b'}' => RightBrace,
+                        b',' => Comma,
+                        b'.' => Dot,
+                        b'-' => Minus,
+                        b'+' => Plus,
+                        b';' => Semicolon,
+                        b'*' => Star,
+                        b'/' => {
+                            unimplemented!()
+                            /*
+                            loop {
+                                match self.lookahead(store, 1) {
+                                    None => 
+                                if x == "\n" {
+                                    break
+                                }
+                            }
+                            */
+                        }
+                        b'!' => {
+                            if self.advance_matching_byte(store, b'=') {
+                                BangEqual
+                            } else {
+                                Bang
+                            }
+                        }
+                        b'=' => {
+                            if self.advance_matching_byte(store, b'=') {
+                                EqualEqual
+                            } else {
+                                Equal
+                            }
+                        }
+                        b'<' => {
+                            if self.advance_matching_byte(store, b'=') {
+                                LessEqual
+                            } else {
+                                Less
+                            }
+                        }
+                        b'>' => {
+                            if self.advance_matching_byte(store, b'=') {
+                                GreaterEqual
+                            } else {
+                                Greater
+                            }
+                        }
+                        _ => SyntaxError,
+                    };
+                }
+
+                length = 1;
+            }
+        } else {
+            self.cursor += 1; // now we are past the end, signaling to not produce aymore tokens
+            length = 0;
+            kind = TokenKind::Eof;
+        }
+
+        let location = SourceLocation {
+            source_id: self.source_id,
+            offset,
+            length,
+        };
+        Some(Token {
+            location,
+            kind,
+        })
+    }
 }
 
 pub fn test_run(source: String) {
@@ -198,6 +322,8 @@ impl SourceStore {
             panic!()
         }
     }
+
+    //pub fn get_char
 
     pub fn len(&self, id: SourceId) -> usize {
         if self.data.contains_key(&id) {
