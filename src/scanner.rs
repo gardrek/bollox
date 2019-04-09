@@ -1,5 +1,6 @@
+//use crate::result::Result;
+//use crate::result::Error;
 use std::fmt;
-use crate::result::Result;
 
 #[derive(Debug)]
 pub struct Token {
@@ -12,9 +13,7 @@ impl fmt::Display for Token {
         write!(
             f,
             "Token {:?} at {}, length {}",
-            self.kind,
-            self.location.offset,
-            self.location.length,
+            self.kind, self.location.offset, self.location.length,
         )
     }
 }
@@ -22,25 +21,28 @@ impl fmt::Display for Token {
 #[derive(Debug, Clone)]
 pub enum TokenKind {
     // Single-character symbols.
-    LeftParen, RightParen, LeftBrace, RightBrace,
-    Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
 
     // One or two character symbols.
-    Bang, BangEqual,
-    Equal, EqualEqual,
-    Greater, GreaterEqual,
-    Less, LessEqual,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
 
-    /* 
-    // Literals.
-    Identifier, String, Number,
-
-    // Keywords.
-    And, Class, Else, False, Fun, For, If, Nil, Or,
-    Print, Return, Super, This, True, Var, While,
-    */
-
-    //Literal(Literal),
     Eof,
 
     //TODO: remove this and start using Result<Token>
@@ -59,8 +61,6 @@ enum Literal {
 struct StringLiteralIndex;
 */
 
-
-
 /*
 enum TokenLength {
     Fixed(usize),
@@ -71,11 +71,9 @@ enum TokenLength {
 }
 
 fn token_length(kind: TokenKind) -> TokenLength {
-    
+
 }
 */
-
-
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct SourceId(usize);
@@ -83,6 +81,7 @@ pub struct SourceId(usize);
 #[derive(Debug)]
 pub struct SourceLocation {
     source_id: SourceId,
+    //eof: bool,
     offset: usize,
     length: usize,
 }
@@ -121,6 +120,8 @@ impl fmt::Display for SourceLocation {
 pub struct Scanner {
     source_id: SourceId,
     cursor: usize,
+    // whether eof was reached
+    //eof: false,
 }
 
 impl Scanner {
@@ -130,6 +131,10 @@ impl Scanner {
             cursor: 0,
         }
     }
+
+    //fn advance_char<'a>(&mut self, store: &'a SourceStore) -> Option<char> {
+        //asser
+    //}
 
     fn advance_byte<'a>(&mut self, store: &'a SourceStore) -> Option<u8> {
         let c = self.cursor;
@@ -203,7 +208,7 @@ impl Scanner {
                             /*
                             loop {
                                 match self.lookahead(store, 1) {
-                                    None => 
+                                    None =>
                                 if x == "\n" {
                                     break
                                 }
@@ -255,16 +260,13 @@ impl Scanner {
             offset,
             length,
         };
-        Some(Token {
-            location,
-            kind,
-        })
+        Some(Token { location, kind })
     }
 }
 
 pub fn test_run(source: String) {
     let mut store = SourceStore::new();
-    let id = store.add_id().unwrap();
+    let id = store.add_empty();
     store.push_str(id, &source);
 
     let mut sc = Scanner::new(id);
@@ -274,10 +276,15 @@ pub fn test_run(source: String) {
             None => break,
         }
     }
+
+    store.remove(id);
 }
 
 use std::collections::HashMap;
 
+/**
+This store holds multiple source files, and can append to them, and give out slices of them.
+**/
 pub struct SourceStore {
     data: HashMap<SourceId, String>,
     next_id: usize,
@@ -291,48 +298,51 @@ impl SourceStore {
         }
     }
 
-    pub fn add_id(&mut self) -> Option<SourceId> {
+    pub fn add_empty(&mut self) -> SourceId {
+        self.add_from_source(String::new())
+    }
+
+    /// Adds a new source file and returns an ID which can be used to access it.
+    /// When a source file is removed, this ID becomes invalid, but won't be reused.
+    pub fn add_from_source(&mut self, source: String) -> SourceId {
         let id = SourceId(self.next_id);
         if self.data.contains_key(&id) {
-            return None;
+            panic!("SourceStore tried to create id that already exists");
         }
-        self.data.insert(id, String::new());
+        self.data.insert(id, source);
         self.next_id += 1;
-        Some(id)
+        id
+    }
+
+    fn get(&self, id: SourceId) -> Option<&String> {
+        self.data.get(&id)
+    }
+
+    fn get_mut(&mut self, id: SourceId) -> Option<&mut String> {
+        self.data.get_mut(&id)
     }
 
     pub fn push_str(&mut self, id: SourceId, s: &str) {
-        if self.data.contains_key(&id) {
-            match self.data.get_mut(&id) {
-                Some(inner) => inner.push_str(s),
-                None => panic!(),
-            }
-        } else {
-            panic!()
-        }
+        let inner = self.get_mut(id).unwrap();
+        inner.push_str(s)
     }
 
     pub fn get_slice(&self, id: SourceId, start: usize, length: usize) -> &str {
-        if self.data.contains_key(&id) {
-            match self.data.get(&id) {
-                Some(inner) => &inner[start..(start + length)],
-                None => panic!(),
-            }
-        } else {
-            panic!()
-        }
+        let inner = self.get(id).unwrap();
+        &inner[start..(start + length)]
     }
 
     //pub fn get_char
 
     pub fn len(&self, id: SourceId) -> usize {
+        self.get(id).unwrap().len()
+    }
+
+    pub fn remove(&mut self, id: SourceId) {
         if self.data.contains_key(&id) {
-            match self.data.get(&id) {
-                Some(inner) => inner.len(),
-                None => panic!(),
-            }
+            self.data.remove(&id);
         } else {
-            panic!()
+            panic!("tried to remove nonexistant source from SourceStore");
         }
     }
 }

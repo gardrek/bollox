@@ -1,12 +1,13 @@
 use std::fmt;
 use std::io;
 
-//use super::scanner::SourceLocation;
+//use crate::scanner::SourceLocation;
 
-pub type Result<T = ()> = std::result::Result<T, Error>;
+//pub type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
+    Unkown,
     Usage,
     Io(io::Error),
     //SyntaxError(SourceLocation<'static>),
@@ -19,7 +20,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
-            //None => write!(f, "Unkown Bollox Error"),
+            Unkown => write!(f, "Unkown Bollox Error"),
             Usage => write!(f, "Usage:\n    bollox <script>     Run a Lox script\n    bollox              Run in interactive mode"),
             Io(e) => write!(f, "{}", e),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),
