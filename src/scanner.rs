@@ -1,7 +1,7 @@
 //use crate::result::Result;
 //use crate::result::Error;
 
-use crate::store::{SourceStore, SourceId};
+use crate::store::{SourceId, SourceStore, Identifier, IdentifierStore};
 
 use std::fmt;
 
@@ -25,9 +25,35 @@ impl Token {
     pub fn get_slice<'a>(&self, store: &'a SourceStore) -> &'a str {
         self.location.get_slice(store)
     }
+
+    pub fn intern_identifier(&mut self, store: &SourceStore, id_store: &mut IdentifierStore) -> Option<Identifier> {
+        match self.kind {
+            TokenKind::Identifier(option_id) => {
+                let id = match option_id {
+                    Some(_) => return None,
+                    None => {
+                        let string = String::from(self.get_slice(store));
+                        match id_store.get_id(&string) {
+                            Some(&id) => Some(id),
+                            None => {
+                                let id = id_store.add(string);
+                                Some(id)
+                            },
+                        }
+                    },
+                };
+                match id {
+                    Some(_) => self.kind = TokenKind::Identifier(id),
+                    None => unreachable!(),
+                }
+                id
+            },
+            _ => None,
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TokenKind {
     // Single-character symbols.
     LeftParen,
@@ -53,21 +79,19 @@ pub enum TokenKind {
     LessEqual,
 
     // Literals
-    //Identifier(Identifier),
-    Identifier,
+    Identifier(Option<Identifier>),
     Number(f64),
     String,
     //String(String),
-
     Reserved(ReservedWord),
 
     //Eof,
 
-    //TODO: remove this and start using Result<Token>
+    // TODO: remove this and start using Result<Token>
     SyntaxError,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ReservedWord {
     And,
     Class,
@@ -351,7 +375,7 @@ impl Scanner {
     }
 
     /*  TODO: Strings will need to be copied in some fashion for compiling and for
-        escape sequences if they are added */
+    escape sequences if they are added */
     fn string(&mut self, store: &SourceStore) -> Option<Token> {
         let offset = self.cursor - 1;
         let mut length = 0;
@@ -363,7 +387,7 @@ impl Scanner {
                 length += 1;
                 if c == b'"' {
                     length += 1;
-                    break
+                    break;
                 }
             } else {
                 return None;
@@ -407,14 +431,11 @@ impl Scanner {
 
         let kind = if let Some(word) = reserved_word(location.get_slice(store)) {
             TokenKind::Reserved(word)
-        }else{
-            TokenKind::Identifier
+        } else {
+            TokenKind::Identifier(None)
         };
 
-        Some(Token {
-            location,
-            kind,
-        })
+        Some(Token { location, kind })
     }
 
     pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {

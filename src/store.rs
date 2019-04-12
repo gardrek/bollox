@@ -69,12 +69,14 @@ impl SourceStore {
     }
 }
 
-//*
+use std::num::NonZeroUsize;
+
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub struct Identifier(usize);
+pub struct Identifier(NonZeroUsize);
 
 pub struct IdentifierStore {
     data: Vec<String>,
+    map: HashMap<String, Identifier>,
     next_id: usize,
 }
 
@@ -82,24 +84,30 @@ impl IdentifierStore {
     pub fn new() -> Self {
         Self {
             data: vec![String::from("")],
+            map: HashMap::new(),
             next_id: 1,
         }
     }
 
     pub fn add(&mut self, s: String) -> Identifier {
-        let index = self.next_id;
-        self.next_id += 1;
+        let index = NonZeroUsize::new(self.next_id).unwrap();
+        let id = Identifier(index);
+        self.map.insert(s.clone(), id);
         self.data.push(s);
-        Identifier(index)
+        self.next_id += 1;
+        id
     }
 
-    fn get(&self, id: Identifier) -> Option<&String> {
-        let index = id.0;
+    pub fn get(&self, id: Identifier) -> Option<&String> {
+        let index = id.0.get();
         if index < self.data.len() {
             Some(&self.data[index])
         } else {
             None
         }
     }
+
+    pub fn get_id(&self, s: &str) -> Option<&Identifier> {
+        self.map.get(s)
+    }
 }
-// */
