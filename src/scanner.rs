@@ -1,5 +1,8 @@
 //use crate::result::Result;
 //use crate::result::Error;
+
+use crate::store::{SourceStore, SourceId};
+
 use std::fmt;
 
 #[derive(Debug)]
@@ -15,6 +18,12 @@ impl fmt::Display for Token {
             "Token {:?} at {}, length {}",
             self.kind, self.location.offset, self.location.length,
         )
+    }
+}
+
+impl Token {
+    pub fn get_slice<'a>(&self, store: &'a SourceStore) -> &'a str {
+        self.location.get_slice(store)
     }
 }
 
@@ -43,15 +52,45 @@ pub enum TokenKind {
     Less,
     LessEqual,
 
-    Eof,
+    // Literals
+    //Identifier(Identifier),
+    Identifier,
+    Number(f64),
+    String,
+    //String(String),
+
+    Reserved(ReservedWord),
+
+    //Eof,
 
     //TODO: remove this and start using Result<Token>
     SyntaxError,
 }
 
+#[derive(Debug, Clone)]
+pub enum ReservedWord {
+    And,
+    Class,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
+    Break,
+}
+
 /*
 #[derive(Clone, Copy, Debug)]
-enum Literal {
+pub enum Literal {
     Identifier,
     String(StringLiteralIndex),
     Number(f64),
@@ -75,9 +114,6 @@ fn token_length(kind: TokenKind) -> TokenLength {
 }
 */
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub struct SourceId(usize);
-
 #[derive(Debug)]
 pub struct SourceLocation {
     source_id: SourceId,
@@ -87,10 +123,9 @@ pub struct SourceLocation {
 }
 
 impl SourceLocation {
-    /*fn get_slice<'a>(&self, source: &'a str) -> &'a str {
-        let n = self.offset;
-        &source[n..(n + self.length)]
-    }*/
+    fn get_slice<'a>(&self, store: &'a SourceStore) -> &'a str {
+        store.get_slice(self.source_id, self.offset, self.length)
+    }
 
     fn file_path<'a>(&self) -> &'a str {
         unimplemented!()
@@ -117,11 +152,40 @@ impl fmt::Display for SourceLocation {
     }
 }
 
+fn reserved_word(s: &str) -> Option<ReservedWord> {
+    use ReservedWord::*;
+    Some(match s {
+        "and" => And,
+        "class" => Class,
+        "else" => Else,
+        "false" => False,
+        "fun" => Fun,
+        "for" => For,
+        "if" => If,
+        "nil" => Nil,
+        "or" => Or,
+        "print" => Print,
+        "return" => Return,
+        "super" => Super,
+        "this" => This,
+        "true" => True,
+        "var" => Var,
+        "while" => While,
+        "break" => Break,
+        _ => return None,
+    })
+}
+
+fn is_alphanumeric(c: char) -> bool {
+    c.is_digit(36) || c == '_'
+}
+
 pub struct Scanner {
     source_id: SourceId,
+    // location, in bytes which we re currently looking at
     cursor: usize,
     // whether eof was reached
-    //eof: false,
+    //eof: bool,
 }
 
 impl Scanner {
@@ -129,12 +193,25 @@ impl Scanner {
         Self {
             source_id,
             cursor: 0,
+            //eof: false,
         }
     }
 
-    //fn advance_char<'a>(&mut self, store: &'a SourceStore) -> Option<char> {
-        //asser
-    //}
+    /*
+    fn advance_char<'a>(&mut self, store: &'a SourceStore) -> Option<char> {
+        if self.eof {
+            return None;
+        }
+
+        let c = self.cursor;
+        if c < store.len(self.source_id) {
+            self.cursor += 1;
+            Some(store.get_slice(self.source_id, c, 1).as_bytes()[0])
+        }
+
+        unimplemented!()
+    }
+    */
 
     fn advance_byte<'a>(&mut self, store: &'a SourceStore) -> Option<u8> {
         let c = self.cursor;
@@ -146,6 +223,7 @@ impl Scanner {
         }
     }
 
+    /*
     fn advance_matching_byte<'a>(&mut self, store: &'a SourceStore, m: u8) -> bool {
         let c = self.cursor;
         if c < store.len(self.source_id) {
@@ -160,8 +238,9 @@ impl Scanner {
             false
         }
     }
+    */
 
-    fn lookahead<'a>(&mut self, store: &'a SourceStore, length: usize) -> Option<&'a str> {
+    fn lookahead<'a>(&self, store: &'a SourceStore, length: usize) -> Option<&'a str> {
         let c = self.cursor;
         if (c + length) < store.len(self.source_id) {
             Some(store.get_slice(self.source_id, c, length))
@@ -170,89 +249,94 @@ impl Scanner {
         }
     }
 
-    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
-        let current = self.cursor;
-        let offset = current;
-        let total_length = store.len(self.source_id);
-
-        // If we are past the end
-        if current > total_length {
-            return None;
+    fn peek_byte(&self, store: &SourceStore) -> Option<u8> {
+        let c = self.lookahead(store, 1);
+        match c {
+            None => None,
+            Some(x) => Some(x.as_bytes()[0]),
         }
+    }
 
-        let length;
-        let kind;
+    fn static_token(&mut self, kind: TokenKind) -> Option<Token> {
+        let location = SourceLocation {
+            source_id: self.source_id,
+            offset: self.cursor - 1,
+            length: 1,
+        };
+        Some(Token { location, kind })
+    }
 
-        if current < total_length {
-            if total_length.saturating_sub(current) == 0 {
-                panic!();
-            } else {
-                //let first = store.get_slice(self.source_id, current, 1);
-                let first = self.advance_byte(store).unwrap();
-
-                {
-                    use TokenKind::*;
-                    kind = match first {
-                        b'(' => LeftParen,
-                        b')' => RightParen,
-                        b'{' => LeftBrace,
-                        b'}' => RightBrace,
-                        b',' => Comma,
-                        b'.' => Dot,
-                        b'-' => Minus,
-                        b'+' => Plus,
-                        b';' => Semicolon,
-                        b'*' => Star,
-                        b'/' => {
-                            unimplemented!()
-                            /*
-                            loop {
-                                match self.lookahead(store, 1) {
-                                    None =>
-                                if x == "\n" {
-                                    break
-                                }
-                            }
-                            */
-                        }
-                        b'!' => {
-                            if self.advance_matching_byte(store, b'=') {
-                                BangEqual
-                            } else {
-                                Bang
-                            }
-                        }
-                        b'=' => {
-                            if self.advance_matching_byte(store, b'=') {
-                                EqualEqual
-                            } else {
-                                Equal
-                            }
-                        }
-                        b'<' => {
-                            if self.advance_matching_byte(store, b'=') {
-                                LessEqual
-                            } else {
-                                Less
-                            }
-                        }
-                        b'>' => {
-                            if self.advance_matching_byte(store, b'=') {
-                                GreaterEqual
-                            } else {
-                                Greater
-                            }
-                        }
-                        _ => SyntaxError,
-                    };
-                }
-
-                length = 1;
-            }
+    fn match_static_token(
+        &mut self,
+        store: &SourceStore,
+        m: u8,
+        a: TokenKind,
+        b: TokenKind,
+    ) -> Option<Token> {
+        let s = self.lookahead(store, 1);
+        if let Some(s) = s {
+            self.static_token(if s.as_bytes()[0] == m { a } else { b })
         } else {
-            self.cursor += 1; // now we are past the end, signaling to not produce aymore tokens
-            length = 0;
-            kind = TokenKind::Eof;
+            panic!("match_static_token")
+        }
+    }
+
+    fn line_comment(&mut self, store: &SourceStore) -> () {
+        loop {
+            let c = self.advance_byte(store);
+            let c = match c {
+                None => return,
+                Some(x) => x,
+            };
+            if c == b'\n' {
+                self.cursor -= 1;
+                return;
+            }
+        }
+    }
+
+    fn number(&mut self, store: &SourceStore) -> Option<Token> {
+        let mut length = 0;
+        let offset = self.cursor;
+
+        let mut whole = 0;
+        let mut fraction = 0f64;
+        let mut decimal_digit = 0;
+        loop {
+            let c = self.peek_byte(store);
+            if let Some(c) = c {
+                if let Some(digit) = (c as char).to_digit(10) {
+                    self.advance_byte(store);
+                    length += 1;
+                    // TODO: make decimal handling better
+                    if decimal_digit > 0 {
+                        fraction += 10.0_f64.powf(-decimal_digit as f64) * digit as f64;
+                        decimal_digit += 1;
+                    } else {
+                        whole = whole * 10 + digit;
+                    }
+                } else {
+                    if c == b'.' {
+                        self.cursor += 1;
+                        let c = self.peek_byte(store);
+                        if let Some(c) = c {
+                            if (c as char).is_digit(10) {
+                                length += 1;
+                                decimal_digit = 1;
+                            } else {
+                                self.cursor -= 1;
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                return None;
+            }
         }
 
         let location = SourceLocation {
@@ -260,10 +344,166 @@ impl Scanner {
             offset,
             length,
         };
-        Some(Token { location, kind })
+        Some(Token {
+            location,
+            kind: TokenKind::Number(whole as f64 + fraction),
+        })
+    }
+
+    /*  TODO: Strings will need to be copied in some fashion for compiling and for
+        escape sequences if they are added */
+    fn string(&mut self, store: &SourceStore) -> Option<Token> {
+        let offset = self.cursor - 1;
+        let mut length = 0;
+
+        loop {
+            let c = self.peek_byte(store);
+            if let Some(c) = c {
+                self.advance_byte(store);
+                length += 1;
+                if c == b'"' {
+                    length += 1;
+                    break
+                }
+            } else {
+                return None;
+            }
+        }
+
+        let location = SourceLocation {
+            source_id: self.source_id,
+            offset,
+            length,
+        };
+        Some(Token {
+            location,
+            kind: TokenKind::String,
+        })
+    }
+
+    fn identifier(&mut self, store: &SourceStore) -> Option<Token> {
+        let offset = self.cursor;
+        let mut length = 0;
+
+        loop {
+            let c = self.peek_byte(store);
+            if let Some(c) = c {
+                if is_alphanumeric(c as char) {
+                    self.advance_byte(store);
+                    length += 1;
+                } else {
+                    break;
+                }
+            } else {
+                return None;
+            }
+        }
+
+        let location = SourceLocation {
+            source_id: self.source_id,
+            offset,
+            length,
+        };
+
+        let kind = if let Some(word) = reserved_word(location.get_slice(store)) {
+            TokenKind::Reserved(word)
+        }else{
+            TokenKind::Identifier
+        };
+
+        Some(Token {
+            location,
+            kind,
+        })
+    }
+
+    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
+        let current = self.cursor;
+        let _offset = current;
+        let total_length = store.len(self.source_id);
+
+        // If we are past the end
+        if current > total_length {
+            return None;
+        }
+
+        let token;
+
+        if current < total_length {
+            if total_length.saturating_sub(current) == 0 {
+                panic!();
+            } else {
+                //let first = store.get_slice(self.source_id, current, 1);
+                let err_token = Some(Token {
+                    location: SourceLocation {
+                        source_id: self.source_id,
+                        offset: current,
+                        length: 0,
+                    },
+                    kind: TokenKind::SyntaxError,
+                });
+
+                token = loop {
+                    let first = self.advance_byte(store);
+                    let inner = match first {
+                        None => break err_token,
+                        Some(x) => x,
+                    };
+                    use TokenKind::*;
+                    match inner {
+                        b'(' => break self.static_token(LeftParen),
+                        b')' => break self.static_token(RightParen),
+                        b'{' => break self.static_token(LeftBrace),
+                        b'}' => break self.static_token(RightBrace),
+                        b',' => break self.static_token(Comma),
+                        b'.' => break self.static_token(Dot),
+                        b'-' => break self.static_token(Minus),
+                        b'+' => break self.static_token(Plus),
+                        b';' => break self.static_token(Semicolon),
+                        b'*' => break self.static_token(Star),
+                        b'/' => match self.peek_byte(store) {
+                            None => break err_token,
+                            Some(c) => match c {
+                                b'/' => {
+                                    self.line_comment(store);
+                                    continue;
+                                }
+                                b'*' => break err_token, // TODO: add block comments here
+                                _ => break self.static_token(Slash),
+                            },
+                        },
+                        b'!' => break self.match_static_token(store, b'=', BangEqual, Bang),
+                        b'=' => break self.match_static_token(store, b'=', EqualEqual, Equal),
+                        b'>' => break self.match_static_token(store, b'=', GreaterEqual, Greater),
+                        b'<' => break self.match_static_token(store, b'=', LessEqual, Less),
+                        b'"' => break self.string(store),
+                        c if (c as char).is_whitespace() => {
+                            //self.cursor += 1;
+                            continue;
+                        }
+                        c if (c as char).is_digit(10) => {
+                            self.cursor -= 1; // FIXME: maybe should do this another way?
+                            break self.number(store);
+                        }
+                        c if is_alphanumeric(c as char) => {
+                            self.cursor -= 1;
+                            break self.identifier(store);
+                        }
+                        _ => break err_token,
+                    }
+                };
+            }
+        } else {
+            self.cursor += 1; // now we are past the end, signaling to not produce any more tokens
+                              //self.eof = true;
+            token = None;
+        }
+
+        token
     }
 }
 
+/*
 pub fn test_run(source: String) {
     let mut store = SourceStore::new();
     let id = store.add_empty();
@@ -272,80 +512,14 @@ pub fn test_run(source: String) {
     let mut sc = Scanner::new(id);
     loop {
         match sc.scan_token(&store) {
-            Some(token) => eprintln!("{}", token),
+            Some(token) => eprintln!("{}: \"{}\"", token, token.location.get_slice(&store)),
             None => break,
         }
     }
 
     store.remove(id);
 }
-
-use std::collections::HashMap;
-
-/**
-This store holds multiple source files, and can append to them, and give out slices of them.
-**/
-pub struct SourceStore {
-    data: HashMap<SourceId, String>,
-    next_id: usize,
-}
-
-impl SourceStore {
-    pub fn new() -> Self {
-        Self {
-            data: HashMap::new(),
-            next_id: 1,
-        }
-    }
-
-    pub fn add_empty(&mut self) -> SourceId {
-        self.add_from_source(String::new())
-    }
-
-    /// Adds a new source file and returns an ID which can be used to access it.
-    /// When a source file is removed, this ID becomes invalid, but won't be reused.
-    pub fn add_from_source(&mut self, source: String) -> SourceId {
-        let id = SourceId(self.next_id);
-        if self.data.contains_key(&id) {
-            panic!("SourceStore tried to create id that already exists");
-        }
-        self.data.insert(id, source);
-        self.next_id += 1;
-        id
-    }
-
-    fn get(&self, id: SourceId) -> Option<&String> {
-        self.data.get(&id)
-    }
-
-    fn get_mut(&mut self, id: SourceId) -> Option<&mut String> {
-        self.data.get_mut(&id)
-    }
-
-    pub fn push_str(&mut self, id: SourceId, s: &str) {
-        let inner = self.get_mut(id).unwrap();
-        inner.push_str(s)
-    }
-
-    pub fn get_slice(&self, id: SourceId, start: usize, length: usize) -> &str {
-        let inner = self.get(id).unwrap();
-        &inner[start..(start + length)]
-    }
-
-    //pub fn get_char
-
-    pub fn len(&self, id: SourceId) -> usize {
-        self.get(id).unwrap().len()
-    }
-
-    pub fn remove(&mut self, id: SourceId) {
-        if self.data.contains_key(&id) {
-            self.data.remove(&id);
-        } else {
-            panic!("tried to remove nonexistant source from SourceStore");
-        }
-    }
-}
+*/
 
 //impl<'a> Iterator for &mut Scanner<'a> {
 //type Item = Token<'a>;

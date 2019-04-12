@@ -7,7 +7,7 @@ use std::io;
 
 #[derive(Debug)]
 pub enum Error {
-    Unkown,
+    //Unkown,
     Usage,
     Io(io::Error),
     //SyntaxError(SourceLocation<'static>),
@@ -20,7 +20,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
-            Unkown => write!(f, "Unkown Bollox Error"),
+            //Unkown => write!(f, "Unkown Bollox Error"),
             Usage => write!(f, "Usage:\n    bollox <script>     Run a Lox script\n    bollox              Run in interactive mode"),
             Io(e) => write!(f, "{}", e),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),

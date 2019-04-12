@@ -20,13 +20,15 @@ type GenericResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 //mod interpreter;
 mod result;
 mod scanner;
+mod parser;
+mod store;
 
 fn main() -> GenericResult {
     let args: Vec<String> = env::args().collect();
     let r = match args.len() {
         // If no arguments, run interactively
         1 => {
-            scanner::test_run("".into());
+            parser::test_run("".into());
             Ok(())
             //unimplemented!()
         }
@@ -34,7 +36,7 @@ fn main() -> GenericResult {
         // If a filename is given, run it as a script
         2 => {
             let source = fs::read_to_string(Path::new(&args[1]))?;
-            scanner::test_run(source);
+            parser::test_run(source);
             Ok(())
         }
 

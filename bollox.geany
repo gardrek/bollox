@@ -20,20 +20,19 @@ indent_mode=2
 [project]
 name=bollox
 base_path=/home/leslie/Projects/Rust/bollox
+description=
 
 [long line marker]
 long_line_behaviour=1
 long_line_column=100
 
 [files]
-current_page=1
-FILE_NAME_0=314;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fmain.rs;0;4
-FILE_NAME_1=28;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fscanner.rs;0;4
-FILE_NAME_2=159;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fresult.rs;0;4
-FILE_NAME_3=95;None;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fscript.lox;0;4
-FILE_NAME_4=378;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fmain.rs;0;4
-FILE_NAME_5=0;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Flib.rs;0;4
-FILE_NAME_6=458;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Frun.rs;0;4
+current_page=6
+FILE_NAME_0=133;None;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2FCargo.toml;0;4
+FILE_NAME_1=314;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fmain.rs;0;4
+FILE_NAME_2=88;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fscanner.rs;0;4
+FILE_NAME_3=161;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fsrc%2Fresult.rs;0;4
+FILE_NAME_4=95;None;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fbollox%2Fscript.lox;0;4
+FILE_NAME_5=3790;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fscanner.rs;0;4
+FILE_NAME_6=73;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fast%2Ftoken.rs;0;4
 FILE_NAME_7=0;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fresult.rs;0;4
-FILE_NAME_8=2053;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fscanner.rs;0;4
-FILE_NAME_9=137;Rust;0;EUTF-8;0;1;1;%2Fhome%2Fleslie%2FProjects%2FRust%2Fother%2Frlox%2Fsrc%2Fast%2Ftoken.rs;0;4
