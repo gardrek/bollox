@@ -18,6 +18,7 @@ use std::path::Path;
 type GenericResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 //mod interpreter;
+mod ast;
 mod parser;
 mod result;
 mod scanner;

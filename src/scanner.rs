@@ -1,7 +1,11 @@
 //use crate::result::Result;
 //use crate::result::Error;
 
-use crate::store::{SourceId, SourceStore, Identifier, IdentifierStore};
+use crate::store::{SourceId, SourceStore, Store, StoreId};
+
+type Identifier = StoreId;
+
+type IdentifierStore = Store<String>;
 
 use std::fmt;
 
@@ -26,7 +30,31 @@ impl Token {
         self.location.get_slice(store)
     }
 
-    pub fn intern_identifier(&mut self, store: &SourceStore, id_store: &mut IdentifierStore) -> Option<Identifier> {
+    pub fn kind(&self) -> &TokenKind {
+        &self.kind
+    }
+
+    pub fn in_kinds(&self, kinds: &[TokenKind]) -> bool {
+        for k in kinds {
+            if &self.kind == k {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn to_operator(&self) -> Operator {
+        match self.kind() {
+            TokenKind::Op(op) => op.clone(),
+            _ => panic!("called to_operator on non-operator token"),
+        }
+    }
+
+    pub fn intern_identifier(
+        &mut self,
+        store: &SourceStore,
+        id_store: &mut IdentifierStore,
+    ) -> Option<Identifier> {
         match self.kind {
             TokenKind::Identifier(option_id) => {
                 let id = match option_id {
@@ -38,28 +66,87 @@ impl Token {
                             None => {
                                 let id = id_store.add(string);
                                 Some(id)
-                            },
+                            }
                         }
-                    },
+                    }
                 };
                 match id {
                     Some(_) => self.kind = TokenKind::Identifier(id),
                     None => unreachable!(),
                 }
                 id
-            },
+            }
+            _ => None,
+        }
+    }
+
+    pub fn intern_string(
+        &mut self,
+        store: &SourceStore,
+        id_store: &mut Store<String>,
+    ) -> Option<StoreId> {
+        match self.kind {
+            TokenKind::StaticString(option_id) => {
+                let id = match option_id {
+                    Some(_) => return None,
+                    None => {
+                        let string = String::from(self.get_slice(store));
+                        match id_store.get_id(&string) {
+                            Some(&id) => Some(id),
+                            None => {
+                                let id = id_store.add(string);
+                                Some(id)
+                            }
+                        }
+                    }
+                };
+                match id {
+                    Some(_) => self.kind = TokenKind::StaticString(id),
+                    None => unreachable!(),
+                }
+                id
+            }
+            _ => None,
+        }
+    }
+
+    pub fn _intern_any(
+        &mut self,
+        store: &SourceStore,
+        intern_store: &mut Store<String>,
+    ) -> Option<StoreId> {
+        match self.kind {
+            TokenKind::Identifier(_) => self.intern_identifier(store, intern_store),
+            TokenKind::StaticString(_) => self.intern_string(store, intern_store),
             _ => None,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Single-character symbols.
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
+
+    Op(Operator),
+
+    // Literals
+    Identifier(Option<Identifier>),
+    Number(f64),
+    StaticString(Option<StoreId>),
+    //String(String),
+    Reserved(ReservedWord),
+
+    Eof,
+
+    // TODO: start using Result<Token>
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
     Comma,
     Dot,
     Minus,
@@ -67,8 +154,6 @@ pub enum TokenKind {
     Semicolon,
     Slash,
     Star,
-
-    // One or two character symbols.
     Bang,
     BangEqual,
     Equal,
@@ -77,21 +162,9 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
-
-    // Literals
-    Identifier(Option<Identifier>),
-    Number(f64),
-    String,
-    //String(String),
-    Reserved(ReservedWord),
-
-    //Eof,
-
-    // TODO: remove this and start using Result<Token>
-    SyntaxError,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ReservedWord {
     And,
     Class,
@@ -138,7 +211,7 @@ fn token_length(kind: TokenKind) -> TokenLength {
 }
 */
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceLocation {
     source_id: SourceId,
     //eof: bool,
@@ -290,6 +363,15 @@ impl Scanner {
         Some(Token { location, kind })
     }
 
+    fn static_token_length(&mut self, kind: TokenKind, length: usize) -> Option<Token> {
+        let location = SourceLocation {
+            source_id: self.source_id,
+            offset: self.cursor - length,
+            length,
+        };
+        Some(Token { location, kind })
+    }
+
     fn match_static_token(
         &mut self,
         store: &SourceStore,
@@ -299,10 +381,25 @@ impl Scanner {
     ) -> Option<Token> {
         let s = self.lookahead(store, 1);
         if let Some(s) = s {
-            self.static_token(if s.as_bytes()[0] == m { a } else { b })
+            if s.as_bytes()[0] == m {
+                self.cursor += 1;
+                self.static_token_length(a, 2)
+            } else {
+                self.static_token_length(b, 1)
+            }
         } else {
             panic!("match_static_token")
         }
+    }
+
+    fn match_static_operator(
+        &mut self,
+        store: &SourceStore,
+        m: u8,
+        a: Operator,
+        b: Operator,
+    ) -> Option<Token> {
+        self.match_static_token(store, m, TokenKind::Op(a), TokenKind::Op(b))
     }
 
     fn line_comment(&mut self, store: &SourceStore) -> () {
@@ -323,30 +420,24 @@ impl Scanner {
         let mut length = 0;
         let offset = self.cursor;
 
-        let mut whole = 0;
-        let mut fraction = 0f64;
-        let mut decimal_digit = 0;
+        let mut decimal = false;
         loop {
             let c = self.peek_byte(store);
             if let Some(c) = c {
-                if let Some(digit) = (c as char).to_digit(10) {
+                if let Some(_digit) = (c as char).to_digit(10) {
                     self.advance_byte(store);
                     length += 1;
-                    // TODO: make decimal handling better
-                    if decimal_digit > 0 {
-                        fraction += 10.0_f64.powf(-decimal_digit as f64) * digit as f64;
-                        decimal_digit += 1;
-                    } else {
-                        whole = whole * 10 + digit;
-                    }
                 } else {
                     if c == b'.' {
+                        if decimal {
+                            break;
+                        }
                         self.cursor += 1;
                         let c = self.peek_byte(store);
                         if let Some(c) = c {
                             if (c as char).is_digit(10) {
                                 length += 1;
-                                decimal_digit = 1;
+                                decimal = true;
                             } else {
                                 self.cursor -= 1;
                                 break;
@@ -368,9 +459,12 @@ impl Scanner {
             offset,
             length,
         };
+
+        let value = location.get_slice(store).parse::<f64>().ok().unwrap();
+
         Some(Token {
             location,
-            kind: TokenKind::Number(whole as f64 + fraction),
+            kind: TokenKind::Number(value),
         })
     }
 
@@ -401,7 +495,7 @@ impl Scanner {
         };
         Some(Token {
             location,
-            kind: TokenKind::String,
+            kind: TokenKind::StaticString(None),
         })
     }
 
@@ -438,9 +532,19 @@ impl Scanner {
         Some(Token { location, kind })
     }
 
+    pub fn collect_tokens(&mut self, store: &SourceStore) -> Vec<Token> {
+        let mut v = vec![];
+        loop {
+            match self.scan_token(store) {
+                None => break,
+                Some(t) => v.push(t),
+            }
+        }
+        v
+    }
+
     pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
         let current = self.cursor;
-        let _offset = current;
         let total_length = store.len(self.source_id);
 
         // If we are past the end
@@ -452,7 +556,7 @@ impl Scanner {
 
         if current < total_length {
             if total_length.saturating_sub(current) == 0 {
-                panic!();
+                panic!("AAaaaaaaaaaaaaaAAAAAAA");
             } else {
                 //let first = store.get_slice(self.source_id, current, 1);
                 let err_token = Some(Token {
@@ -461,7 +565,7 @@ impl Scanner {
                         offset: current,
                         length: 0,
                     },
-                    kind: TokenKind::SyntaxError,
+                    kind: TokenKind::Eof,
                 });
 
                 token = loop {
@@ -470,18 +574,19 @@ impl Scanner {
                         None => break err_token,
                         Some(x) => x,
                     };
+                    use Operator::*;
                     use TokenKind::*;
                     match inner {
                         b'(' => break self.static_token(LeftParen),
                         b')' => break self.static_token(RightParen),
                         b'{' => break self.static_token(LeftBrace),
                         b'}' => break self.static_token(RightBrace),
-                        b',' => break self.static_token(Comma),
-                        b'.' => break self.static_token(Dot),
-                        b'-' => break self.static_token(Minus),
-                        b'+' => break self.static_token(Plus),
-                        b';' => break self.static_token(Semicolon),
-                        b'*' => break self.static_token(Star),
+                        b',' => break self.static_token(Op(Comma)),
+                        b'.' => break self.static_token(Op(Dot)),
+                        b'-' => break self.static_token(Op(Minus)),
+                        b'+' => break self.static_token(Op(Plus)),
+                        b';' => break self.static_token(Op(Semicolon)),
+                        b'*' => break self.static_token(Op(Star)),
                         b'/' => match self.peek_byte(store) {
                             None => break err_token,
                             Some(c) => match c {
@@ -490,13 +595,15 @@ impl Scanner {
                                     continue;
                                 }
                                 b'*' => break err_token, // TODO: add block comments here
-                                _ => break self.static_token(Slash),
+                                _ => break self.static_token(Op(Slash)),
                             },
                         },
-                        b'!' => break self.match_static_token(store, b'=', BangEqual, Bang),
-                        b'=' => break self.match_static_token(store, b'=', EqualEqual, Equal),
-                        b'>' => break self.match_static_token(store, b'=', GreaterEqual, Greater),
-                        b'<' => break self.match_static_token(store, b'=', LessEqual, Less),
+                        b'!' => break self.match_static_operator(store, b'=', BangEqual, Bang),
+                        b'=' => break self.match_static_operator(store, b'=', EqualEqual, Equal),
+                        b'>' => {
+                            break self.match_static_operator(store, b'=', GreaterEqual, Greater)
+                        }
+                        b'<' => break self.match_static_operator(store, b'=', LessEqual, Less),
                         b'"' => break self.string(store),
                         c if (c as char).is_whitespace() => {
                             //self.cursor += 1;
@@ -516,8 +623,15 @@ impl Scanner {
             }
         } else {
             self.cursor += 1; // now we are past the end, signaling to not produce any more tokens
-                              //self.eof = true;
-            token = None;
+            //self.eof = true;
+            token = Some(Token {
+                location: SourceLocation {
+                    source_id: self.source_id,
+                    offset: current,
+                    length: 0,
+                },
+                kind: TokenKind::Eof,
+            });
         }
 
         token
@@ -525,30 +639,15 @@ impl Scanner {
 }
 
 /*
-pub fn test_run(source: String) {
-    let mut store = SourceStore::new();
-    let id = store.add_empty();
-    store.push_str(id, &source);
+impl Iterator for Scanner {
+    type Item = Token;
 
-    let mut sc = Scanner::new(id);
-    loop {
-        match sc.scan_token(&store) {
-            Some(token) => eprintln!("{}: \"{}\"", token, token.location.get_slice(&store)),
-            None => break,
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        //self.scan_token()
+        unimplemented!()
     }
-
-    store.remove(id);
 }
 */
-
-//impl<'a> Iterator for &mut Scanner<'a> {
-//type Item = Token<'a>;
-
-//fn next(&mut self) -> Option<Self::Item> {
-//self.scan_token()
-//}
-//}
 
 /*
 enum LoxTokenKind {

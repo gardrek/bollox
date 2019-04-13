@@ -1,22 +1,2 @@
-var a = 0;
-var b = 1;
-
-while (a < 100) {
-    print a;
-    var temp = a / 1;
-    a = b;
-    b = temp + b;
-}
-
-var str = "String thing yraaaah";
-4069
-0.5489098
-5.pow() // a method called on a number
-
-
-"Asdfasdf"
-
-
-
-
-*
+1 * 2
+false

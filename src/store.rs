@@ -71,34 +71,39 @@ impl SourceStore {
 
 use std::num::NonZeroUsize;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub struct Identifier(NonZeroUsize);
+use std::hash::Hash;
 
-pub struct IdentifierStore {
-    data: Vec<String>,
-    map: HashMap<String, Identifier>,
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub struct StoreId(NonZeroUsize);
+
+pub struct Store<T: Eq + Hash + Clone> {
+    data: Vec<T>,
+    map: HashMap<T, StoreId>,
     next_id: usize,
 }
 
-impl IdentifierStore {
-    pub fn new() -> Self {
+impl<T> Store<T>
+where
+    T: Eq + Hash + Clone,
+{
+    pub fn new(zero_item: T) -> Self {
         Self {
-            data: vec![String::from("")],
+            data: vec![zero_item],
             map: HashMap::new(),
             next_id: 1,
         }
     }
 
-    pub fn add(&mut self, s: String) -> Identifier {
+    pub fn add(&mut self, item: T) -> StoreId {
         let index = NonZeroUsize::new(self.next_id).unwrap();
-        let id = Identifier(index);
-        self.map.insert(s.clone(), id);
-        self.data.push(s);
+        let id = StoreId(index);
+        self.map.insert(item.clone(), id);
+        self.data.push(item);
         self.next_id += 1;
         id
     }
 
-    pub fn get(&self, id: Identifier) -> Option<&String> {
+    pub fn _get(&self, id: StoreId) -> Option<&T> {
         let index = id.0.get();
         if index < self.data.len() {
             Some(&self.data[index])
@@ -107,7 +112,7 @@ impl IdentifierStore {
         }
     }
 
-    pub fn get_id(&self, s: &str) -> Option<&Identifier> {
-        self.map.get(s)
+    pub fn get_id(&self, item: &T) -> Option<&StoreId> {
+        self.map.get(item)
     }
 }
