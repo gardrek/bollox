@@ -2,11 +2,17 @@ use crate::ast::{Expr, Literal};
 use crate::scanner::{Operator, Scanner, Token, TokenKind};
 use crate::store::SourceStore;
 use crate::store::Store;
+use crate::result::Error;
+
+type ExprResult = Result<Expr, Error>;
 
 pub fn test_run(source: String) {
     let mut store = SourceStore::new();
-    let id = store.add_empty();
-    store.push_str(id, &source);
+
+    // move the source in, no need to allocate again
+    let id = store.add_from_source(source);
+
+    store.set_eof(id);
 
     let mut id_store = Store::new(String::from(""));
     let mut string_store = Store::new(String::from(""));
@@ -26,7 +32,7 @@ pub fn test_run(source: String) {
 
     eprintln!("\n{:?}\n", expr);
 
-    store.remove(id);
+    //store.remove(id);
 }
 
 struct Parser {
@@ -91,27 +97,38 @@ impl Parser {
         self.peek_previous().unwrap().to_operator()
     }
 
-    pub fn expression(&mut self) -> Expr {
+    fn consume(&mut self, kinds: &[TokenKind], err: Error) -> Result<Option<&Token>, Error> {
+        if self.check(kinds) {
+            Ok(self.advance())
+        } else {
+            Err(err)
+        }
+    }
+
+    // Recursive Descent
+    // the following functions each represent one rule of the language's grammar
+
+    fn expression(&mut self) -> ExprResult {
         self.equality()
     }
 
-    fn equality(&mut self) -> Expr {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> ExprResult {
+        let mut expr = self.comparison()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::EqualEqual),
             TokenKind::Op(Operator::BangEqual),
         ]) {
             let op = self.get_operator();
-            let right = self.comparison();
+            let right = self.comparison()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn comparison(&mut self) -> Expr {
-        let mut expr = self.addition();
+    fn comparison(&mut self) -> ExprResult {
+        let mut expr = self.addition()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Greater),
@@ -120,81 +137,75 @@ impl Parser {
             TokenKind::Op(Operator::LessEqual),
         ]) {
             let op = self.get_operator();
-            let right = self.addition();
+            let right = self.addition()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn addition(&mut self) -> Expr {
-        let mut expr = self.multiplication();
+    fn addition(&mut self) -> ExprResult {
+        let mut expr = self.multiplication()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Minus),
             TokenKind::Op(Operator::Plus),
         ]) {
             let op = self.get_operator();
-            let right = self.multiplication();
+            let right = self.multiplication()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn multiplication(&mut self) -> Expr {
-        let mut expr = self.unary();
+    fn multiplication(&mut self) -> ExprResult {
+        let mut expr = self.unary()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Slash),
             TokenKind::Op(Operator::Star),
         ]) {
-            dbg!(false);
             let op = self.get_operator();
-            let right = self.unary();
+            let right = self.unary()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> ExprResult {
         if let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Bang),
             TokenKind::Op(Operator::Minus),
         ]) {
             let op = self.get_operator();
-            let right = self.unary();
-            return Expr::Unary(op, Box::new(right));
+            let right = self.unary()?;
+            return Ok(Expr::Unary(op, Box::new(right)));
         }
         self.primary()
     }
 
-    fn primary(&mut self) -> Expr {
+    fn primary(&mut self) -> ExprResult {
         let t = self.peek();
-        if t.is_none() { return Expr::Error}
+        if t.is_none() {
+            return Err(Error::Unkown);
+        }
         let t = t.unwrap();
-        if let Some(literal) = Literal::from_token(t) {
+        Ok(if let Some(literal) = Literal::from_token(t) {
+            self.advance();
             Expr::Literal(literal)
         } else {
             match t.kind() {
                 TokenKind::LeftParen => {
                     self.advance();
-                    let expr = self.expression();
-                    self.consume(&[TokenKind::RightParen], "Unclosed Parenthesis");
+                    let expr = self.expression()?;
+                    self.consume(&[TokenKind::RightParen], Error::UnclosedParenthesis)?;
                     Expr::Grouping(Box::new(expr))
-                },
-                _ => unimplemented!(),
+                }
+                _ => unimplemented!("{:?}", t.kind()),
             }
-        }
-    }
-
-    fn consume(&mut self, kinds: &[TokenKind], panic: &'static str) -> Option<&Token> {
-        if self.check(kinds) {
-            self.advance()
-        } else {
-            panic!(panic)
-        }
+        })
     }
 }
 

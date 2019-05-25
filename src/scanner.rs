@@ -141,7 +141,6 @@ pub enum TokenKind {
     Reserved(ReservedWord),
 
     Eof,
-
     // TODO: start using Result<Token>
 }
 

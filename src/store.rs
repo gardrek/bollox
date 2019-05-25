@@ -1,46 +1,43 @@
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct SourceId(usize);
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /**
 This store holds multiple source files, and can append to them, and give out slices of them.
 **/
 pub struct SourceStore {
-    data: HashMap<SourceId, String>,
-    next_id: usize,
+    data: Vec<String>,
+    //filename: HashMap<SourceId, String>,
+    eof: HashSet<SourceId>,
 }
 
 impl SourceStore {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
-            next_id: 1,
+            data: vec![String::new()],
+            eof: HashSet::new(),
         }
     }
 
-    pub fn add_empty(&mut self) -> SourceId {
+    pub fn _add_empty(&mut self) -> SourceId {
         self.add_from_source(String::new())
     }
 
     /// Adds a new source file and returns an ID which can be used to access it.
     /// When a source file is removed, this ID becomes invalid.
     pub fn add_from_source(&mut self, source: String) -> SourceId {
-        let id = SourceId(self.next_id);
-        if self.data.contains_key(&id) {
-            panic!("SourceStore tried to create ID that already exists.");
-        }
-        self.data.insert(id, source);
-        self.next_id += 1;
-        id
+        self.data.push(source);
+        SourceId(self.data.len() - 1)
     }
 
     fn get(&self, id: SourceId) -> Option<&String> {
-        self.data.get(&id)
+        Some(&self.data[id.0])
     }
 
+    /*
     fn get_mut(&mut self, id: SourceId) -> Option<&mut String> {
-        self.data.get_mut(&id)
+        Some(&mut self.data[id.0])
     }
 
     // TODO: currently this and get_slice panic if an ID doesn't exist. could be improved
@@ -48,10 +45,19 @@ impl SourceStore {
         let inner = self.get_mut(id).unwrap();
         inner.push_str(s)
     }
+    */
 
     pub fn get_slice(&self, id: SourceId, start: usize, length: usize) -> &str {
         let inner = self.get(id).unwrap();
         &inner[start..(start + length)]
+    }
+
+    pub fn _get_eof(&mut self, id: &SourceId) -> bool {
+        self.eof.contains(id)
+    }
+
+    pub fn set_eof(&mut self, id: SourceId) -> () {
+        self.eof.insert(id);
     }
 
     //pub fn get_char
@@ -60,13 +66,11 @@ impl SourceStore {
         self.get(id).unwrap().len()
     }
 
+    /*
     pub fn remove(&mut self, id: SourceId) {
-        if self.data.contains_key(&id) {
-            self.data.remove(&id);
-        } else {
-            panic!("tried to remove nonexistant source from SourceStore");
-        }
+        
     }
+    */
 }
 
 use std::num::NonZeroUsize;

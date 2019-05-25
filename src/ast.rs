@@ -34,7 +34,6 @@ impl Literal {
 
 #[derive(Debug)]
 pub enum Expr {
-    Error,
     Literal(Literal),
     Unary(Operator, Box<Expr>),
     Binary(Box<Expr>, Operator, Box<Expr>),
