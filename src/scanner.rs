@@ -137,6 +137,7 @@ pub enum TokenKind {
     Identifier(Option<Identifier>),
     Number(f64),
     StaticString(Option<StoreId>),
+    UnfinishedString,
     //String(String),
     Reserved(ReservedWord),
 
@@ -353,22 +354,22 @@ impl Scanner {
         }
     }
 
-    fn static_token(&mut self, kind: TokenKind) -> Option<Token> {
+    fn static_token(&mut self, kind: TokenKind) -> Token {
         let location = SourceLocation {
             source_id: self.source_id,
             offset: self.cursor - 1,
             length: 1,
         };
-        Some(Token { location, kind })
+        Token { location, kind }
     }
 
-    fn static_token_length(&mut self, kind: TokenKind, length: usize) -> Option<Token> {
+    fn static_token_length(&mut self, kind: TokenKind, length: usize) -> Token {
         let location = SourceLocation {
             source_id: self.source_id,
             offset: self.cursor - length,
             length,
         };
-        Some(Token { location, kind })
+        Token { location, kind }
     }
 
     fn match_static_token(
@@ -377,7 +378,7 @@ impl Scanner {
         m: u8,
         a: TokenKind,
         b: TokenKind,
-    ) -> Option<Token> {
+    ) -> Token {
         let s = self.lookahead(store, 1);
         if let Some(s) = s {
             if s.as_bytes()[0] == m {
@@ -397,7 +398,7 @@ impl Scanner {
         m: u8,
         a: Operator,
         b: Operator,
-    ) -> Option<Token> {
+    ) -> Token {
         self.match_static_token(store, m, TokenKind::Op(a), TokenKind::Op(b))
     }
 
@@ -415,7 +416,7 @@ impl Scanner {
         }
     }
 
-    fn number(&mut self, store: &SourceStore) -> Option<Token> {
+    fn number(&mut self, store: &SourceStore) -> Token {
         let mut length = 0;
         let offset = self.cursor;
 
@@ -442,6 +443,7 @@ impl Scanner {
                                 break;
                             }
                         } else {
+                            self.cursor -= 1;
                             break;
                         }
                     } else {
@@ -449,7 +451,7 @@ impl Scanner {
                     }
                 }
             } else {
-                return None;
+                break;
             }
         }
 
@@ -461,15 +463,15 @@ impl Scanner {
 
         let value = location.get_slice(store).parse::<f64>().ok().unwrap();
 
-        Some(Token {
+        Token {
             location,
             kind: TokenKind::Number(value),
-        })
+        }
     }
 
     /*  TODO: Strings will need to be copied in some fashion for compiling and for
     escape sequences if they are added */
-    fn string(&mut self, store: &SourceStore) -> Option<Token> {
+    fn string(&mut self, store: &SourceStore) -> Token {
         let offset = self.cursor - 1;
         let mut length = 0;
 
@@ -483,7 +485,17 @@ impl Scanner {
                     break;
                 }
             } else {
-                return None;
+                length += 1;
+                let location = SourceLocation {
+                    source_id: self.source_id,
+                    offset,
+                    length,
+                };
+                let token = Token {
+                    location,
+                    kind: TokenKind::UnfinishedString,
+                };
+                return token;
             }
         }
 
@@ -492,13 +504,13 @@ impl Scanner {
             offset,
             length,
         };
-        Some(Token {
+        Token {
             location,
             kind: TokenKind::StaticString(None),
-        })
+        }
     }
 
-    fn identifier(&mut self, store: &SourceStore) -> Option<Token> {
+    fn identifier(&mut self, store: &SourceStore) -> Token {
         let offset = self.cursor;
         let mut length = 0;
 
@@ -512,7 +524,7 @@ impl Scanner {
                     break;
                 }
             } else {
-                return None;
+                break;
             }
         }
 
@@ -528,7 +540,7 @@ impl Scanner {
             TokenKind::Identifier(None)
         };
 
-        Some(Token { location, kind })
+        Token { location, kind }
     }
 
     pub fn collect_tokens(&mut self, store: &SourceStore) -> Vec<Token> {
@@ -554,86 +566,85 @@ impl Scanner {
         let token;
 
         if current < total_length {
-            if total_length.saturating_sub(current) == 0 {
-                panic!("AAaaaaaaaaaaaaaAAAAAAA");
-            } else {
-                //let first = store.get_slice(self.source_id, current, 1);
-                let err_token = Some(Token {
-                    location: SourceLocation {
-                        source_id: self.source_id,
-                        offset: current,
-                        length: 0,
-                    },
-                    kind: TokenKind::Eof,
-                });
-
-                token = loop {
-                    let first = self.advance_byte(store);
-                    let inner = match first {
-                        None => break err_token,
-                        Some(x) => x,
-                    };
-                    use Operator::*;
-                    use TokenKind::*;
-                    match inner {
-                        b'(' => break self.static_token(LeftParen),
-                        b')' => break self.static_token(RightParen),
-                        b'{' => break self.static_token(LeftBrace),
-                        b'}' => break self.static_token(RightBrace),
-                        b',' => break self.static_token(Op(Comma)),
-                        b'.' => break self.static_token(Op(Dot)),
-                        b'-' => break self.static_token(Op(Minus)),
-                        b'+' => break self.static_token(Op(Plus)),
-                        b';' => break self.static_token(Op(Semicolon)),
-                        b'*' => break self.static_token(Op(Star)),
-                        b'/' => match self.peek_byte(store) {
-                            None => break err_token,
-                            Some(c) => match c {
-                                b'/' => {
-                                    self.line_comment(store);
-                                    continue;
-                                }
-                                b'*' => break err_token, // TODO: add block comments here
-                                _ => break self.static_token(Op(Slash)),
-                            },
-                        },
-                        b'!' => break self.match_static_operator(store, b'=', BangEqual, Bang),
-                        b'=' => break self.match_static_operator(store, b'=', EqualEqual, Equal),
-                        b'>' => {
-                            break self.match_static_operator(store, b'=', GreaterEqual, Greater)
-                        }
-                        b'<' => break self.match_static_operator(store, b'=', LessEqual, Less),
-                        b'"' => break self.string(store),
-                        c if (c as char).is_whitespace() => {
-                            //self.cursor += 1;
-                            continue;
-                        }
-                        c if (c as char).is_digit(10) => {
-                            self.cursor -= 1; // FIXME: maybe should do this another way?
-                            break self.number(store);
-                        }
-                        c if is_alphanumeric(c as char) => {
-                            self.cursor -= 1;
-                            break self.identifier(store);
-                        }
-                        _ => break err_token,
-                    }
-                };
-            }
-        } else {
-            self.cursor += 1; // now we are past the end, signaling to not produce any more tokens
-            //self.eof = true;
-            token = Some(Token {
+            //let first = store.get_slice(self.source_id, current, 1);
+            let err_token = Token {
                 location: SourceLocation {
                     source_id: self.source_id,
                     offset: current,
                     length: 0,
                 },
                 kind: TokenKind::Eof,
-            });
+            };
+
+            token = loop {
+                let first = self.advance_byte(store);
+                let inner = match first {
+                    None => break err_token,
+                    Some(x) => x,
+                };
+                use Operator::*;
+                use TokenKind::*;
+                match inner {
+                    b'(' => break self.static_token(LeftParen),
+                    b')' => break self.static_token(RightParen),
+                    b'{' => break self.static_token(LeftBrace),
+                    b'}' => break self.static_token(RightBrace),
+                    b',' => break self.static_token(Op(Comma)),
+                    b'.' => break self.static_token(Op(Dot)),
+                    b'-' => break self.static_token(Op(Minus)),
+                    b'+' => break self.static_token(Op(Plus)),
+                    b';' => break self.static_token(Op(Semicolon)),
+                    b'*' => break self.static_token(Op(Star)),
+                    b'/' => match self.peek_byte(store) {
+                        None => break err_token,
+                        Some(c) => match c {
+                            b'/' => {
+                                self.line_comment(store);
+                                continue;
+                            }
+                            b'*' => break err_token, // TODO: add block comments here
+                            _ => break self.static_token(Op(Slash)),
+                        },
+                    },
+                    b'!' => break self.match_static_operator(store, b'=', BangEqual, Bang),
+                    b'=' => break self.match_static_operator(store, b'=', EqualEqual, Equal),
+                    b'>' => {
+                        break self.match_static_operator(store, b'=', GreaterEqual, Greater)
+                    }
+                    b'<' => break self.match_static_operator(store, b'=', LessEqual, Less),
+                    b'"' => break self.string(store),
+                    c if (c as char).is_whitespace() => {
+                        //self.cursor += 1;
+                        continue;
+                    }
+                    c if (c as char).is_digit(10) => {
+                        self.cursor -= 1; // FIXME: maybe should do this another way?
+                        break self.number(store);
+                    }
+                    c if is_alphanumeric(c as char) => {
+                        self.cursor -= 1;
+                        break self.identifier(store);
+                    }
+                    _ => break err_token,
+                }
+            };
+        } else {
+            self.cursor += 1; // now we are past the end, signaling to not produce any more tokens
+            return None
+            /*
+            //self.eof = true;
+            token = Token {
+                location: SourceLocation {
+                    source_id: self.source_id,
+                    offset: current,
+                    length: 0,
+                },
+                kind: TokenKind::Eof,
+            };
+            */
         }
 
-        token
+        Some(token)
     }
 }
 

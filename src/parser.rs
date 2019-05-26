@@ -1,5 +1,5 @@
 use crate::ast::{Expr, Literal};
-use crate::scanner::{Operator, Scanner, Token, TokenKind};
+use crate::scanner::{Operator, Scanner, Token, TokenKind, ReservedWord};
 use crate::store::SourceStore;
 use crate::store::Store;
 use crate::result::Error;
@@ -28,7 +28,7 @@ pub fn test_run(source: String) {
     }
 
     let mut parser = Parser::new(tokens);
-    let expr = parser.expression();
+    let expr = parser.parse();
 
     eprintln!("\n{:?}\n", expr);
 
@@ -105,8 +105,34 @@ impl Parser {
         }
     }
 
+    // TODO: implement panic button and synchronize
+    fn _synchronize(&mut self) -> () {
+        self.advance();
+
+        while let Some(token) = self.peek() {
+            if let TokenKind::Op(Operator::Semicolon) = self.peek_previous().unwrap().kind() {
+                return
+            }
+
+            use ReservedWord::*;
+            match token.kind() {
+                TokenKind::Reserved(keyword) => match keyword {
+                    Class | Fun | Var | For | If | While | Print | Return => return,
+                    _ => (),
+                },
+                _ => (),
+            }
+
+            self.advance();
+        }
+    }
+
     // Recursive Descent
     // the following functions each represent one rule of the language's grammar
+
+    fn parse(&mut self) -> ExprResult {
+        self.expression()
+    }
 
     fn expression(&mut self) -> ExprResult {
         self.equality()
@@ -203,7 +229,8 @@ impl Parser {
                     self.consume(&[TokenKind::RightParen], Error::UnclosedParenthesis)?;
                     Expr::Grouping(Box::new(expr))
                 }
-                _ => unimplemented!("{:?}", t.kind()),
+                //_ => unimplemented!("{:?}", t.kind()),
+                _ => return Err(Error::Unkown),
             }
         })
     }
