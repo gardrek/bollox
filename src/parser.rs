@@ -1,47 +1,16 @@
 use crate::ast::{Expr, Literal};
-use crate::scanner::{Operator, Scanner, Token, TokenKind, ReservedWord};
-use crate::store::SourceStore;
-use crate::store::Store;
 use crate::result::Error;
+use crate::scanner::{Operator, ReservedWord, Token, TokenKind};
 
 type ExprResult = Result<Expr, Error>;
 
-pub fn test_run(source: String) {
-    let mut store = SourceStore::new();
-
-    // move the source in, no need to allocate again
-    let id = store.add_from_source(source);
-
-    store.set_eof(id);
-
-    let mut id_store = Store::new(String::from(""));
-    let mut string_store = Store::new(String::from(""));
-
-    let mut sc = Scanner::new(id);
-    let mut tokens = sc.collect_tokens(&store);
-
-    for token in tokens.iter_mut() {
-        eprintln!("{}: {}", token, token.get_slice(&store));
-        //eprint!("{} ", token.get_slice(&store));
-        token.intern_identifier(&store, &mut id_store);
-        token.intern_string(&store, &mut string_store);
-    }
-
-    let mut parser = Parser::new(tokens);
-    let expr = parser.parse();
-
-    eprintln!("\n{:?}\n", expr);
-
-    //store.remove(id);
-}
-
-struct Parser {
+pub struct Parser {
     tokens: Vec<Token>,
     cursor: usize,
 }
 
 impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, cursor: 0 }
     }
 
@@ -111,7 +80,7 @@ impl Parser {
 
         while let Some(token) = self.peek() {
             if let TokenKind::Op(Operator::Semicolon) = self.peek_previous().unwrap().kind() {
-                return
+                return;
             }
 
             use ReservedWord::*;
@@ -130,7 +99,7 @@ impl Parser {
     // Recursive Descent
     // the following functions each represent one rule of the language's grammar
 
-    fn parse(&mut self) -> ExprResult {
+    pub fn parse(&mut self) -> ExprResult {
         self.expression()
     }
 
@@ -215,7 +184,7 @@ impl Parser {
     fn primary(&mut self) -> ExprResult {
         let t = self.peek();
         if t.is_none() {
-            return Err(Error::Unkown);
+            return Err(Error::Unknown);
         }
         let t = t.unwrap();
         Ok(if let Some(literal) = Literal::from_token(t) {
@@ -230,7 +199,7 @@ impl Parser {
                     Expr::Grouping(Box::new(expr))
                 }
                 //_ => unimplemented!("{:?}", t.kind()),
-                _ => return Err(Error::Unkown),
+                _ => return Err(Error::Unknown),
             }
         })
     }

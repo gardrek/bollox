@@ -3,14 +3,15 @@ use std::io;
 
 //use crate::scanner::SourceLocation;
 
-//pub type Result<T = ()> = std::result::Result<T, Error>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    Unkown,
+    Unknown,
     Usage,
     Io(io::Error),
     UnclosedParenthesis,
+    Unimplemented(&'static str),
     //SyntaxError(SourceLocation<'static>),
     //Other(Box<dyn std::error::Error>),
 }
@@ -21,10 +22,11 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
-            Unkown => write!(f, "Unkown Bollox Error"),
+            Unknown => write!(f, "Unkown Bollox Error"),
             Usage => write!(f, "Usage:\n    bollox <script>     Run a Lox script\n    bollox              Run in interactive mode"),
             Io(e) => write!(f, "{}", e),
             UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
+            Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),
             //Other(_) => write!(f, "{}", self),
         }

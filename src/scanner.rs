@@ -1,11 +1,7 @@
-//use crate::result::Result;
-//use crate::result::Error;
+use crate::result::Result;
+use crate::result::Error;
 
 use crate::store::{SourceId, SourceStore, Store, StoreId};
-
-type Identifier = StoreId;
-
-type IdentifierStore = Store<String>;
 
 use std::fmt;
 
@@ -23,6 +19,68 @@ impl fmt::Display for Token {
             self.kind, self.location.offset, self.location.length,
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    // Single-character symbols.
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+
+    Op(Operator),
+
+    // Literals
+    Identifier(Option<StoreId>),
+    Number(f64),
+    StaticString(Option<StoreId>),
+    UnfinishedString,
+    //String(String),
+    Reserved(ReservedWord),
+
+    Eof,
+    // TODO: start using Result<Token>
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReservedWord {
+    And,
+    Class,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
+    Break,
 }
 
 impl Token {
@@ -53,8 +111,8 @@ impl Token {
     pub fn intern_identifier(
         &mut self,
         store: &SourceStore,
-        id_store: &mut IdentifierStore,
-    ) -> Option<Identifier> {
+        id_store: &mut Store<String>,
+    ) -> Option<StoreId> {
         match self.kind {
             TokenKind::Identifier(option_id) => {
                 let id = match option_id {
@@ -121,68 +179,6 @@ impl Token {
             _ => None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
-    // Single-character symbols.
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-
-    Op(Operator),
-
-    // Literals
-    Identifier(Option<Identifier>),
-    Number(f64),
-    StaticString(Option<StoreId>),
-    UnfinishedString,
-    //String(String),
-    Reserved(ReservedWord),
-
-    Eof,
-    // TODO: start using Result<Token>
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ReservedWord {
-    And,
-    Class,
-    Else,
-    False,
-    Fun,
-    For,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-    Break,
 }
 
 /*
@@ -294,21 +290,21 @@ impl Scanner {
         }
     }
 
-    /*
-    fn advance_char<'a>(&mut self, store: &'a SourceStore) -> Option<char> {
-        if self.eof {
-            return None;
-        }
-
+    fn _advance_char<'a>(&mut self, store: &'a SourceStore) -> Option<char> {
         let c = self.cursor;
-        if c < store.len(self.source_id) {
-            self.cursor += 1;
-            Some(store.get_slice(self.source_id, c, 1).as_bytes()[0])
-        }
 
-        unimplemented!()
+        if c < store.len(self.source_id) {
+            let ch = store
+                .get_slice(self.source_id, c, 1)
+                .chars()
+                .next()
+                .unwrap();
+            self.cursor += ch.len_utf8();
+            Some(ch)
+        } else {
+            None
+        }
     }
-    */
 
     fn advance_byte<'a>(&mut self, store: &'a SourceStore) -> Option<u8> {
         let c = self.cursor;
@@ -543,121 +539,97 @@ impl Scanner {
         Token { location, kind }
     }
 
-    pub fn collect_tokens(&mut self, store: &SourceStore) -> Vec<Token> {
+    pub fn collect_or_first_error(&mut self, store: &SourceStore) -> Result<Vec<Token>> {
         let mut v = vec![];
         loop {
             match self.scan_token(store) {
+                Some(result) => v.push(result?),
                 None => break,
-                Some(t) => v.push(t),
             }
         }
-        v
+        Ok(v)
     }
 
-    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Token> {
+    pub fn scan_token(&mut self, store: &SourceStore) -> Option<Result<Token>> {
+        // TODO:  a big one; need to implement rewinding or some other solution to allow parsing
+        // a token that is across multiple lines in interactive mode. need some way to signal EOF
+
         let current = self.cursor;
         let total_length = store.len(self.source_id);
 
         // If we are past the end
-        if current > total_length {
+        if current >= total_length {
             return None;
         }
 
-        let token;
+        let token = loop {
+            let first = self.advance_byte(store);
 
-        if current < total_length {
-            //let first = store.get_slice(self.source_id, current, 1);
-            let err_token = Token {
-                location: SourceLocation {
-                    source_id: self.source_id,
-                    offset: current,
-                    length: 0,
-                },
-                kind: TokenKind::Eof,
-            };
+            // If there's no bytes left return None to signal the end
+            let inner = first?;
 
-            token = loop {
-                let first = self.advance_byte(store);
-                let inner = match first {
-                    None => break err_token,
-                    Some(x) => x,
-                };
-                use Operator::*;
-                use TokenKind::*;
-                match inner {
-                    b'(' => break self.static_token(LeftParen),
-                    b')' => break self.static_token(RightParen),
-                    b'{' => break self.static_token(LeftBrace),
-                    b'}' => break self.static_token(RightBrace),
-                    b',' => break self.static_token(Op(Comma)),
-                    b'.' => break self.static_token(Op(Dot)),
-                    b'-' => break self.static_token(Op(Minus)),
-                    b'+' => break self.static_token(Op(Plus)),
-                    b';' => break self.static_token(Op(Semicolon)),
-                    b'*' => break self.static_token(Op(Star)),
-                    b'/' => match self.peek_byte(store) {
-                        None => break err_token,
-                        Some(c) => match c {
-                            b'/' => {
-                                self.line_comment(store);
-                                continue;
-                            }
-                            b'*' => break err_token, // TODO: add block comments here
-                            _ => break self.static_token(Op(Slash)),
-                        },
+            use Operator::*;
+            use TokenKind::*;
+            match inner {
+                b'(' => break self.static_token(LeftParen),
+                b')' => break self.static_token(RightParen),
+                b'{' => break self.static_token(LeftBrace),
+                b'}' => break self.static_token(RightBrace),
+                b',' => break self.static_token(Op(Comma)),
+                b'.' => break self.static_token(Op(Dot)),
+                b'-' => break self.static_token(Op(Minus)),
+                b'+' => break self.static_token(Op(Plus)),
+                b';' => break self.static_token(Op(Semicolon)),
+                b'*' => break self.static_token(Op(Star)),
+                b'/' => match self.peek_byte(store) {
+                    // no bytes left
+                    None => return None,
+                    Some(c) => match c {
+                        b'/' => {
+                            self.line_comment(store);
+                            continue;
+                        }
+                        b'*' => return Some(Err(Error::Unimplemented("Block comments"))), // TODO: add block comments here
+                        _ => break self.static_token(Op(Slash)),
                     },
-                    b'!' => break self.match_static_operator(store, b'=', BangEqual, Bang),
-                    b'=' => break self.match_static_operator(store, b'=', EqualEqual, Equal),
-                    b'>' => {
-                        break self.match_static_operator(store, b'=', GreaterEqual, Greater)
-                    }
-                    b'<' => break self.match_static_operator(store, b'=', LessEqual, Less),
-                    b'"' => break self.string(store),
-                    c if (c as char).is_whitespace() => {
-                        //self.cursor += 1;
-                        continue;
-                    }
-                    c if (c as char).is_digit(10) => {
-                        self.cursor -= 1; // FIXME: maybe should do this another way?
-                        break self.number(store);
-                    }
-                    c if is_alphanumeric(c as char) => {
-                        self.cursor -= 1;
-                        break self.identifier(store);
-                    }
-                    _ => break err_token,
-                }
-            };
-        } else {
-            self.cursor += 1; // now we are past the end, signaling to not produce any more tokens
-            return None
-            /*
-            //self.eof = true;
-            token = Token {
-                location: SourceLocation {
-                    source_id: self.source_id,
-                    offset: current,
-                    length: 0,
                 },
-                kind: TokenKind::Eof,
-            };
-            */
-        }
+                b'!' => break self.match_static_operator(store, b'=', BangEqual, Bang),
+                b'=' => break self.match_static_operator(store, b'=', EqualEqual, Equal),
+                b'>' => break self.match_static_operator(store, b'=', GreaterEqual, Greater),
+                b'<' => break self.match_static_operator(store, b'=', LessEqual, Less),
+                b'"' => break self.string(store),
+                c if (c as char).is_whitespace() => {
+                    //self.cursor += 1;
+                    continue;
+                }
+                c if (c as char).is_digit(10) => {
+                    self.cursor -= 1; // FIXME: maybe should do this another way?
+                    break self.number(store);
+                }
+                c if is_alphanumeric(c as char) => {
+                    self.cursor -= 1;
+                    break self.identifier(store);
+                }
+                // FIXME: This currently treats unrecognized bytes (not chars) as an error.
+                // Perhaps we can push this on to the next phase with some small Unicode awareness.
+                // That would be the first step to having Unicode in the language.
+                // (well second, after refactoring this loop to use chars instead of bytes)
+                _ => return Some(Err(Error::Unknown)),
+            }
+        };
 
-        Some(token)
+        Some(Ok(token))
     }
 }
 
-/*
 impl Iterator for Scanner {
-    type Item = Token;
+    type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         //self.scan_token()
         unimplemented!()
     }
 }
-*/
 
 /*
 enum LoxTokenKind {

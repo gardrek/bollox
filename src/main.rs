@@ -12,42 +12,57 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-//use std::io;
-//use std::io::Write;
+use std::io;
+use std::io::BufRead;
+use std::io::Write;
 
 type GenericResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 //mod interpreter;
 mod ast;
+mod interpreter;
+mod object;
 mod parser;
 mod result;
 mod scanner;
 mod store;
 
-fn main() -> GenericResult {
+fn run() -> GenericResult {
     let args: Vec<String> = env::args().collect();
-    let r = match args.len() {
+    match args.len() {
         // If no arguments, run interactively
         1 => {
-            parser::test_run("".into());
-            Ok(())
-            //unimplemented!()
+            let mut stdout = io::BufWriter::new(io::stdout());
+            let mut stdin = io::BufReader::new(io::stdin());
+            loop {
+                write!(stdout, "> ")?;
+                stdout.flush()?;
+                let mut input = String::new();
+                stdin.read_line(&mut input)?;
+                println!("{:?}", input);
+                writeln!(stdout, "{}", interpreter::run_string(input)?)?;
+                stdout.flush()?;
+            }
         }
 
         // If a filename is given, run it as a script
         2 => {
             let source = fs::read_to_string(Path::new(&args[1]))?;
-            parser::test_run(source);
+            println!("{:?}", source);
+            interpreter::run_string(source)?;
             Ok(())
         }
 
-        _ => Err(result::Error::Usage),
-    };
-    match r {
-        Ok(_) => Ok(()),
+        _ => Err(result::Error::Usage.into()),
+    }
+}
+
+fn main() -> () {
+    match run() {
+        Ok(_) => (),
         Err(e) => {
-            println!("{}", e);
-            Err(Box::new(e))
+            eprintln!("{}", e);
+            ()
         }
     }
 }
