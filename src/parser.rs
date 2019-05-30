@@ -1,8 +1,9 @@
-use crate::ast::{Expr, Literal};
-use crate::result::Error;
+use crate::ast::Expr;
+use crate::object::Object;
+use crate::result::{Error, Result};
 use crate::scanner::{Operator, ReservedWord, Token, TokenKind};
 
-type ExprResult = Result<Expr, Error>;
+type ExprResult = Result<Expr>;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -66,7 +67,7 @@ impl Parser {
         self.peek_previous().unwrap().to_operator()
     }
 
-    fn consume(&mut self, kinds: &[TokenKind], err: Error) -> Result<Option<&Token>, Error> {
+    fn consume(&mut self, kinds: &[TokenKind], err: Error) -> Result<Option<&Token>> {
         if self.check(kinds) {
             Ok(self.advance())
         } else {
@@ -184,10 +185,10 @@ impl Parser {
     fn primary(&mut self) -> ExprResult {
         let t = self.peek();
         if t.is_none() {
-            return Err(Error::Unknown);
+            return Err(Error::Ice("Unexpected end of Token stream"));
         }
         let t = t.unwrap();
-        Ok(if let Some(literal) = Literal::from_token(t) {
+        Ok(if let Some(literal) = Object::new_from_token(t) {
             self.advance();
             Expr::Literal(literal)
         } else {
@@ -198,8 +199,7 @@ impl Parser {
                     self.consume(&[TokenKind::RightParen], Error::UnclosedParenthesis)?;
                     Expr::Grouping(Box::new(expr))
                 }
-                //_ => unimplemented!("{:?}", t.kind()),
-                _ => return Err(Error::Unknown),
+                _ => return Err(Error::Unimplemented("Unexpected Token")),
             }
         })
     }

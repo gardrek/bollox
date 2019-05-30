@@ -29,18 +29,22 @@ mod store;
 
 fn run() -> GenericResult {
     let args: Vec<String> = env::args().collect();
+
+    let mut stdout = io::BufWriter::new(io::stdout());
+
     match args.len() {
         // If no arguments, run interactively
         1 => {
-            let mut stdout = io::BufWriter::new(io::stdout());
             let mut stdin = io::BufReader::new(io::stdin());
             loop {
                 write!(stdout, "> ")?;
                 stdout.flush()?;
                 let mut input = String::new();
                 stdin.read_line(&mut input)?;
-                println!("{:?}", input);
-                writeln!(stdout, "{}", interpreter::run_string(input)?)?;
+                match interpreter::run_string(input) {
+                    Ok(res) => writeln!(stdout, "{}", res)?,
+                    Err(res) => writeln!(stdout, "{:?}", res)?,
+                }
                 stdout.flush()?;
             }
         }
@@ -48,8 +52,8 @@ fn run() -> GenericResult {
         // If a filename is given, run it as a script
         2 => {
             let source = fs::read_to_string(Path::new(&args[1]))?;
-            println!("{:?}", source);
-            interpreter::run_string(source)?;
+            writeln!(stdout, "{}", interpreter::run_string(source)?)?;
+            stdout.flush()?;
             Ok(())
         }
 

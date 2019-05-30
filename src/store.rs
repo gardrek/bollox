@@ -73,12 +73,10 @@ impl SourceStore {
     */
 }
 
-use std::num::NonZeroUsize;
-
 use std::hash::Hash;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub struct StoreId(NonZeroUsize);
+pub struct StoreId(usize);
 
 pub struct Store<T: Eq + Hash + Clone> {
     data: Vec<T>,
@@ -86,20 +84,20 @@ pub struct Store<T: Eq + Hash + Clone> {
     next_id: usize,
 }
 
-impl<T> Store<T>
-where
-    T: Eq + Hash + Clone,
-{
-    pub fn new(zero_item: T) -> Self {
-        Self {
-            data: vec![zero_item],
+impl<T: Eq + Hash + Clone + Default> Store<T> {
+    pub fn new() -> Self {
+        let mut s = Self {
+            data: vec![],
             map: HashMap::new(),
-            next_id: 1,
-        }
+            next_id: 0,
+        };
+        let t = T::default();
+        s.add(t);
+        s
     }
 
     pub fn add(&mut self, item: T) -> StoreId {
-        let index = NonZeroUsize::new(self.next_id).unwrap();
+        let index = self.next_id;
         let id = StoreId(index);
         self.map.insert(item.clone(), id);
         self.data.push(item);
@@ -107,8 +105,8 @@ where
         id
     }
 
-    pub fn _get(&self, id: StoreId) -> Option<&T> {
-        let index = id.0.get();
+    pub fn get(&self, id: StoreId) -> Option<&T> {
+        let index = id.0;
         if index < self.data.len() {
             Some(&self.data[index])
         } else {
@@ -116,7 +114,7 @@ where
         }
     }
 
-    pub fn get_id(&self, item: &T) -> Option<&StoreId> {
+    pub fn _get_id(&self, item: &T) -> Option<&StoreId> {
         self.map.get(item)
     }
 }
