@@ -5,3 +5,5 @@ authors = ["gardrek <gardrek.the.destroyer@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+string-interner = "*"
+lazy_static = "*"

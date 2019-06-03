@@ -1,9 +1,7 @@
-use crate::ast::Expr;
+use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
 use crate::object::Object;
 use crate::result::{Error, Result};
 use crate::scanner::{Operator, ReservedWord, Token, TokenKind};
-
-type ExprResult = Result<Expr>;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -13,6 +11,10 @@ pub struct Parser {
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, cursor: 0 }
+    }
+
+    fn is_at_end(&self) -> bool {
+        return self.cursor >= self.tokens.len();
     }
 
     fn get_token(&self, c: usize) -> Option<&Token> {
@@ -100,30 +102,73 @@ impl Parser {
     // Recursive Descent
     // the following functions each represent one rule of the language's grammar
 
-    pub fn parse(&mut self) -> ExprResult {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
+        let mut statements = vec![];
+        while !self.is_at_end() {
+            statements.push(self.statement()?);
+        }
+        Ok(statements)
     }
 
-    fn expression(&mut self) -> ExprResult {
+    /*
+    program     → declaration* EOF ;
+
+    declaration → varDecl
+                | statement ;
+
+    statement   → exprStmt
+                | printStmt ;
+                */
+
+    fn statement(&mut self) -> Result<Stmt> {
+        if let Some(_) = self.check_advance(&[TokenKind::Reserved(ReservedWord::Print)]) {
+            return self.print_statement();
+        }
+        self.expression_statement()
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(
+            &[TokenKind::Op(Operator::Semicolon)],
+            Error::ExpectedSemicolon,
+        )?;
+        Ok(Stmt::new(StmtKind::Print(expr)))
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(
+            &[TokenKind::Op(Operator::Semicolon)],
+            Error::ExpectedSemicolon,
+        )?;
+        Ok(Stmt::new(StmtKind::Expr(expr)))
+    }
+
+    fn expression(&mut self) -> Result<Expr> {
         self.equality()
     }
 
-    fn equality(&mut self) -> ExprResult {
+    fn equality(&mut self) -> Result<Expr> {
         let mut expr = self.comparison()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::EqualEqual),
             TokenKind::Op(Operator::BangEqual),
         ]) {
+            let location = expr.location.clone();
             let op = self.get_operator();
             let right = self.comparison()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr {
+                location,
+                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ExprResult {
+    fn comparison(&mut self) -> Result<Expr> {
         let mut expr = self.addition()?;
 
         while let Some(_) = self.check_advance(&[
@@ -132,72 +177,95 @@ impl Parser {
             TokenKind::Op(Operator::Less),
             TokenKind::Op(Operator::LessEqual),
         ]) {
+            let location = expr.location.clone();
             let op = self.get_operator();
             let right = self.addition()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr {
+                location,
+                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn addition(&mut self) -> ExprResult {
+    fn addition(&mut self) -> Result<Expr> {
         let mut expr = self.multiplication()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Minus),
             TokenKind::Op(Operator::Plus),
         ]) {
+            let location = expr.location.clone();
             let op = self.get_operator();
             let right = self.multiplication()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr {
+                location,
+                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn multiplication(&mut self) -> ExprResult {
+    fn multiplication(&mut self) -> Result<Expr> {
         let mut expr = self.unary()?;
 
         while let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Slash),
             TokenKind::Op(Operator::Star),
         ]) {
+            let location = expr.location.clone();
             let op = self.get_operator();
             let right = self.unary()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr {
+                location,
+                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ExprResult {
+    fn unary(&mut self) -> Result<Expr> {
         if let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Bang),
             TokenKind::Op(Operator::Minus),
         ]) {
             let op = self.get_operator();
             let right = self.unary()?;
-            return Ok(Expr::Unary(op, Box::new(right)));
+            let location = right.location.clone();
+            return Ok(Expr {
+                location,
+                kind: ExprKind::Unary(op, Box::new(right)),
+            });
         }
         self.primary()
     }
 
-    fn primary(&mut self) -> ExprResult {
+    fn primary(&mut self) -> Result<Expr> {
         let t = self.peek();
         if t.is_none() {
             return Err(Error::Ice("Unexpected end of Token stream"));
         }
         let t = t.unwrap();
+        let location = t.location().clone();
         Ok(if let Some(literal) = Object::new_from_token(t) {
             self.advance();
-            Expr::Literal(literal)
+            Expr {
+                location,
+                kind: ExprKind::Literal(literal),
+            }
         } else {
             match t.kind() {
                 TokenKind::LeftParen => {
                     self.advance();
                     let expr = self.expression()?;
                     self.consume(&[TokenKind::RightParen], Error::UnclosedParenthesis)?;
-                    Expr::Grouping(Box::new(expr))
+                    Expr {
+                        location,
+                        kind: ExprKind::Grouping(Box::new(expr)),
+                    }
                 }
                 _ => return Err(Error::Unimplemented("Unexpected Token")),
             }

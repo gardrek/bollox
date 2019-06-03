@@ -1,4 +1,17 @@
--1 + (2 * 3) - 5 > 100 == false + "hello\n world" / -345 >= 456 != 2;
-987777.f();
-
-3.14;
+print "true stuff:";
+print false != true;
+print 10 > 1;
+print 12.0 == 12.000;
+print "" == "";
+print "E" == "E";
+print "AB" == "A" + "B";
+print "";
+print "false stuff:";
+print 1000 < 10;
+print "" == 0;
+print nil == false;
+print "";
+print "other stuff:";
+print (100 + 0.01898) / 100 * 17 - (18 + -34);
+print "ADSFASDFSADF";
+print "";
