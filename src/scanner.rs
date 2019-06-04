@@ -44,8 +44,8 @@ pub enum TokenKind {
     Reserved(ReservedWord),
 }
 
-impl PartialEq for TokenKind {
-    fn eq(&self, other: &Self) -> bool {
+impl TokenKind {
+    pub fn same_kind(&self, other: &Self) -> bool {
         use TokenKind::*;
         match (self, other) {
             (LeftParen, LeftParen) |
@@ -120,7 +120,7 @@ impl Token {
 
     pub fn in_kinds(&self, kinds: &[TokenKind]) -> bool {
         for k in kinds {
-            if &self.kind == k {
+            if self.kind.same_kind(k) {
                 return true;
             }
         }

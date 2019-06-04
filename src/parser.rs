@@ -148,7 +148,7 @@ impl Parser {
         };
         self.consume(
             &[TokenKind::Op(Operator::Semicolon)],
-            Error::ExpectedSemicolon,
+            Error::ExpectedSemicolon, // HERE: errors here even tho there's a semicolon
         )?;
         Ok(Stmt::new(StmtKind::VariableDeclaration(sym, initializer)))
     }
