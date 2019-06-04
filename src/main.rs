@@ -92,9 +92,9 @@ fn main() -> () {
 }
 
 use interpreter::Interpreter;
-use scanner::Scanner;
 use parser::Parser;
 use result::Result;
+use scanner::Scanner;
 
 pub fn run_string(source: String) -> Result<Option<String>> {
     {
@@ -118,4 +118,3 @@ pub fn run_string(source: String) -> Result<Option<String>> {
         Ok(None)
     }
 }
-

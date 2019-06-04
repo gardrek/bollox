@@ -25,21 +25,18 @@ impl StringKind {
             Static(sym) => {
                 let interner = INTERNER.read().unwrap();
                 interner.resolve(*sym).unwrap().into()
-            },
-            Dynamic(s) => s.clone(),
-            Cons(a, b) => {
-                format!("{}{}", a.to_string(), b.to_string())
             }
-        }.into()
+            Dynamic(s) => s.clone(),
+            Cons(a, b) => format!("{}{}", a.to_string(), b.to_string()),
+        }
+        .into()
     }
 
     pub fn concat(self, other: Self) -> Self {
         use StringKind::*;
         match (&self, &other) {
             (Dynamic(_), _) | (_, Dynamic(_)) => unimplemented!(),
-            (_, _) => {
-                Cons(Box::new(self), Box::new(other))
-            },
+            (_, _) => Cons(Box::new(self), Box::new(other)),
         }
     }
 }
@@ -110,7 +107,7 @@ impl PartialEq for Object {
                 (_, Dynamic(b)) => &a_kind.to_string() == b,
                 (Cons(_, _), Cons(_, _)) | (Cons(_, _), _) | (_, Cons(_, _)) => {
                     a_kind.to_string() == b_kind.to_string()
-                },
+                }
             },
             (_, _) => false,
         }

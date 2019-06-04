@@ -2,6 +2,7 @@ use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
 use crate::object::Object;
 use crate::result::{Error, Result};
 use crate::scanner::{Operator, ReservedWord, Token, TokenKind};
+use crate::INTERNER;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -78,7 +79,7 @@ impl Parser {
     }
 
     // TODO: implement panic button and synchronize
-    fn _synchronize(&mut self) -> () {
+    fn synchronize(&mut self) -> () {
         self.advance();
 
         while let Some(token) = self.peek() {
@@ -105,9 +106,51 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut statements = vec![];
         while !self.is_at_end() {
-            statements.push(self.statement()?);
+            if let Some(stmt) = self.declaration() {
+                statements.push(stmt?);
+            }
         }
         Ok(statements)
+    }
+
+    fn declaration_b(&mut self) -> Result<Stmt> {
+        let v = self.variable_declaration()?;
+        if let Some(_) = self.check_advance(&[TokenKind::Reserved(ReservedWord::Var)]) {
+            return Ok(v);
+        }
+        self.statement()
+    }
+
+    fn declaration(&mut self) -> Option<Result<Stmt>> {
+        match self.declaration_b() {
+            Ok(v) => {
+                Some(Ok(v))
+            }
+            Err(e) => {
+                self.synchronize();
+                //Some(Err(Error::Unimplemented("Declaration synchronize hit")))
+                Some(Err(e))
+            }
+        }
+    }
+
+    fn variable_declaration(&mut self) -> Result<Stmt> {
+        let sym = self.advance().and_then(|t| match t.kind() {
+            TokenKind::Identifier(sym) => Some(sym.clone()),
+            _ => None,
+        }).ok_or(Error::ExpectedIdentifier)?;
+        let initializer = if let Some(_) = self.check_advance(&[
+            TokenKind::Op(Operator::Equal),
+        ]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(
+            &[TokenKind::Op(Operator::Semicolon)],
+            Error::ExpectedSemicolon,
+        )?;
+        Ok(Stmt::new(StmtKind::VariableDeclaration(sym, initializer)))
     }
 
     /*

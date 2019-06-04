@@ -1,5 +1,5 @@
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
-use crate::object::{Object,};
+use crate::object::Object;
 use crate::result::{Error, Result};
 
 pub struct Interpreter {
@@ -14,7 +14,7 @@ impl Interpreter {
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Option<Object>> {
         let mut obj = None;
         for statement in statements {
-            //eprintln!("{}", statement);
+            eprintln!("{}", statement);
             use StmtKind::*;
             obj = match statement.kind {
                 Expr(expr) => Some(self.evaluate(&expr)?),
@@ -22,6 +22,7 @@ impl Interpreter {
                     println!("{}", self.evaluate(&expr)?);
                     None
                 }
+                VariableDeclaration(_, _) => unimplemented!(),
             };
         }
         Ok(obj)
@@ -73,11 +74,13 @@ impl Interpreter {
                         (String(left_s), String(right_s)) => {
                             Object::String(left_s.concat(right_s))
                             //String(StringKind::Dynamic(
-                                //left.string_concat(&right)
-                                    //.map_err(|_| Error::Runtime("Cannot concat, second arg not a string"))?
+                            //left.string_concat(&right)
+                            //.map_err(|_| Error::Runtime("Cannot concat, second arg not a string"))?
                             //))
                         }
-                        (String(_), _) => return Err(Error::Runtime("Cannot concat, second arg not a string")),
+                        (String(_), _) => {
+                            return Err(Error::Runtime("Cannot concat, second arg not a string"))
+                        }
                         _ => {
                             return Err(Error::Runtime(
                                 "Cannot use plus, first arg not a number or string",
@@ -135,6 +138,7 @@ impl Interpreter {
                 }
             }
             Grouping(ref inside) => self.evaluate(inside.as_ref().clone())?,
+            VariableAccess(_) => unimplemented!(),
         })
     }
 }

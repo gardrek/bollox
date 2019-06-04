@@ -2,8 +2,8 @@ use crate::result::Error;
 use crate::result::Result;
 use crate::INTERNER;
 use crate::SOURCE;
-use string_interner::Sym;
 use std::sync::RwLockReadGuard;
+use string_interner::Sym;
 
 type SourceReadGuard<'a> = RwLockReadGuard<'a, String>;
 
@@ -25,7 +25,7 @@ impl fmt::Display for Token {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum TokenKind {
     // Single-character symbols.
     LeftParen,
@@ -42,6 +42,25 @@ pub enum TokenKind {
     Identifier(Sym),
 
     Reserved(ReservedWord),
+}
+
+impl PartialEq for TokenKind {
+    fn eq(&self, other: &Self) -> bool {
+        use TokenKind::*;
+        match (self, other) {
+            (LeftParen, LeftParen) |
+            (RightParen, RightParen) |
+            (LeftBrace, LeftBrace) |
+            (RightBrace, RightBrace) |
+            (Op(_), Op(_)) |
+            (Number(_), Number(_)) |
+            (StaticString(_), StaticString(_)) |
+            (UnfinishedString, UnfinishedString) |
+            (Identifier(_), Identifier(_)) |
+            (Reserved(_), Reserved(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,11 +84,7 @@ pub enum Operator {
 
 impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:?}",
-            self,
-        )
+        write!(f, "{:?}", self,)
     }
 }
 
@@ -376,10 +391,7 @@ impl Scanner {
             }
         }
 
-        let location = SourceLocation {
-            offset,
-            length,
-        };
+        let location = SourceLocation { offset, length };
 
         let value = location.get_slice(source).parse::<f64>().ok().unwrap();
 
@@ -389,8 +401,7 @@ impl Scanner {
         }
     }
 
-    /* TODO: Strings will need to be copied in some fashion for compiling and for
-    escape sequences if they are added */
+    /* TODO: add escape sequence(s) at least for double quote */
     fn string(&mut self, source: &SourceReadGuard) -> Token {
         let offset = self.cursor - 1;
         let mut length = 0;
@@ -406,10 +417,7 @@ impl Scanner {
                 }
             } else {
                 length += 1;
-                let location = SourceLocation {
-                    offset,
-                    length,
-                };
+                let location = SourceLocation { offset, length };
                 let token = Token {
                     location,
                     kind: TokenKind::UnfinishedString,
@@ -418,10 +426,7 @@ impl Scanner {
             }
         }
 
-        let location = SourceLocation {
-            offset,
-            length,
-        };
+        let location = SourceLocation { offset, length };
 
         /*  Even though we're not multi-threaded yet,
             there's no reason to keep the lock longer than necessary
@@ -456,10 +461,7 @@ impl Scanner {
             }
         }
 
-        let location = SourceLocation {
-            offset,
-            length,
-        };
+        let location = SourceLocation { offset, length };
 
         let kind = if let Some(word) = reserved_word(location.get_slice(source)) {
             TokenKind::Reserved(word)
@@ -544,9 +546,7 @@ impl Scanner {
                 },
                 b'!' => break self.match_static_operator(&source, b'=', BangEqual, Bang)?,
                 b'=' => break self.match_static_operator(&source, b'=', EqualEqual, Equal)?,
-                b'>' => {
-                    break self.match_static_operator(&source, b'=', GreaterEqual, Greater)?
-                }
+                b'>' => break self.match_static_operator(&source, b'=', GreaterEqual, Greater)?,
                 b'<' => break self.match_static_operator(&source, b'=', LessEqual, Less)?,
                 b'"' => break self.string(&source),
                 c if (c as char).is_whitespace() => {
