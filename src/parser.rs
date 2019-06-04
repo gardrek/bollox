@@ -139,13 +139,13 @@ impl Parser {
             TokenKind::Identifier(sym) => Some(sym.clone()),
             _ => None,
         }).ok_or(Error::ExpectedIdentifier)?;
-        let initializer = if let Some(_) = self.check_advance(&[
+        let initializer = {if let Some(_) = self.check_advance(&[
             TokenKind::Op(Operator::Equal),
         ]) {
             Some(self.expression()?)
         } else {
             None
-        };
+        }};
         self.consume(
             &[TokenKind::Op(Operator::Semicolon)],
             Error::ExpectedSemicolon, // HERE: errors here even tho there's a semicolon

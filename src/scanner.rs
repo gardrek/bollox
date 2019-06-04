@@ -52,12 +52,12 @@ impl TokenKind {
             (RightParen, RightParen) |
             (LeftBrace, LeftBrace) |
             (RightBrace, RightBrace) |
-            (Op(_), Op(_)) |
             (Number(_), Number(_)) |
             (StaticString(_), StaticString(_)) |
             (UnfinishedString, UnfinishedString) |
-            (Identifier(_), Identifier(_)) |
-            (Reserved(_), Reserved(_)) => true,
+            (Identifier(_), Identifier(_)) => true,
+            (Reserved(word_a), Reserved(word_b)) => word_a == word_b,
+            (Op(op_a), Op(op_b)) => op_a == op_b,
             _ => false,
         }
     }
