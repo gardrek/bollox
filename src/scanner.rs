@@ -1,278 +1,57 @@
-use crate::result::Error;
-use crate::result::Result;
+use crate::result;
+use crate::source::{SourceId, SourceLocation, SourceReadGuard};
+use crate::token::{string_as_reserved_word, Operator, Token, TokenKind};
 use crate::INTERNER;
 use crate::SOURCE;
-use std::sync::RwLockReadGuard;
-use string_interner::Sym;
 
-type SourceReadGuard<'a> = RwLockReadGuard<'a, String>;
-
-use std::fmt;
-
-#[derive(Debug)]
-pub struct Token {
-    location: SourceLocation,
-    kind: TokenKind,
+fn is_identifier_start(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
 }
 
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Token {:?} at {}, length {}",
-            self.kind, self.location.offset, self.location.length,
-        )
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum TokenKind {
-    // Single-character symbols.
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-
-    Op(Operator),
-
-    // Literals
-    Number(f64),
-    StaticString(Sym),
-    UnfinishedString,
-    Identifier(Sym),
-
-    Reserved(ReservedWord),
-}
-
-impl TokenKind {
-    pub fn same_kind(&self, other: &Self) -> bool {
-        use TokenKind::*;
-        match (self, other) {
-            (LeftParen, LeftParen) |
-            (RightParen, RightParen) |
-            (LeftBrace, LeftBrace) |
-            (RightBrace, RightBrace) |
-            (Number(_), Number(_)) |
-            (StaticString(_), StaticString(_)) |
-            (UnfinishedString, UnfinishedString) |
-            (Identifier(_), Identifier(_)) => true,
-            (Reserved(word_a), Reserved(word_b)) => word_a == word_b,
-            (Op(op_a), Op(op_b)) => op_a == op_b,
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-}
-
-impl fmt::Display for Operator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self,)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ReservedWord {
-    And,
-    Class,
-    Else,
-    False,
-    Fun,
-    For,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-    Break,
-}
-
-impl Token {
-    pub fn kind(&self) -> &TokenKind {
-        &self.kind
-    }
-
-    pub fn location(&self) -> &SourceLocation {
-        &self.location
-    }
-
-    pub fn in_kinds(&self, kinds: &[TokenKind]) -> bool {
-        for k in kinds {
-            if self.kind.same_kind(k) {
-                return true;
-            }
-        }
-        false
-    }
-
-    pub fn to_operator(&self) -> Operator {
-        match self.kind() {
-            TokenKind::Op(op) => op.clone(),
-            _ => panic!("called to_operator on non-operator token"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SourceLocation {
-    // TODO: need some way to get which file a SourceLocation refers to
-    offset: usize,
-    length: usize,
-}
-
-impl SourceLocation {
-    fn get_slice<'a>(&self, source: &'a SourceReadGuard) -> &'a str {
-        let offset = self.offset;
-        &source[offset..(offset + self.length)]
-    }
-
-    /*
-    fn file_path<'a>(&self) -> &'a str {
-        unimplemented!()
-    }
-
-    fn line_number(&self) -> usize {
-        unimplemented!()
-    }
-
-    fn column(&self) -> usize {
-        unimplemented!()
-    }
-    */
-}
-
-impl fmt::Display for SourceLocation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{};{}",
-            self.offset,
-            self.length,
-            /*
-            "  --> {} {}:{}"
-            self.file_path(),
-            self.line_number(),
-            self.column(),
-            */
-        )
-    }
-}
-
-fn reserved_word(s: &str) -> Option<ReservedWord> {
-    use ReservedWord::*;
-    Some(match s {
-        "and" => And,
-        "class" => Class,
-        "else" => Else,
-        "false" => False,
-        "fun" => Fun,
-        "for" => For,
-        "if" => If,
-        "nil" => Nil,
-        "or" => Or,
-        "print" => Print,
-        "return" => Return,
-        "super" => Super,
-        "this" => This,
-        "true" => True,
-        "var" => Var,
-        "while" => While,
-        "break" => Break,
-        _ => return None,
-    })
-}
-
-fn is_alphanumeric(c: char) -> bool {
+fn is_identifier_continue(c: char) -> bool {
     c.is_digit(36) || c == '_'
 }
 
 //use std::path::PathBuf;
 
-pub struct Scanner {
-    //// location of file we're scanning
-    //path: PathBuf,
-    // location, in bytes which we re currently looking at
+pub struct Scanner<'a> {
+    // this is how we get the source file
+    source: SourceReadGuard<'a>,
+    // ID for the source
+    source_id: SourceId,
+    // location, in bytes which we're currently looking at
     cursor: usize,
     // whether eof was reached
-    pub eof: bool,
+    eof: bool,
+    // whether scanning encountered an error
+    had_error: bool,
 }
 
-impl Scanner {
-    pub fn new() -> Self {
-        Self {
+impl Scanner<'_> {
+    pub fn new(source_id: SourceId) -> Scanner<'static> {
+        Scanner {
+            source: SOURCE.read().unwrap(),
+            source_id,
             cursor: 0,
             eof: false,
+            had_error: false,
         }
     }
 
-    fn _advance_char<'a>(&mut self) -> Option<char> {
-        /*
-        let c = self.cursor;
-
-        if c < store.len(self.source_id) {
-            let ch = store
-                .get_slice(self.source_id, c, 1)
-                .chars()
-                .next()
-                .unwrap();
+    fn advance_char(&mut self) -> Option<char> {
+        let index = self.cursor;
+        if index < self.source.len() {
+            let ch = self.source[index..].chars().next().unwrap();
             self.cursor += ch.len_utf8();
             Some(ch)
-        } else {
-            None
-        }
-        */
-        unimplemented!()
-    }
-
-    fn advance_byte(&mut self, source: &SourceReadGuard) -> Option<u8> {
-        let c = self.cursor;
-        if c < source.len() {
-            self.cursor += 1;
-            Some(source[c..(c + 1)].as_bytes()[0])
         } else {
             None
         }
     }
 
     /*
-    fn advance_matching_byte<'a>(&mut self, store: &'a SourceStore, m: u8) -> bool {
-        let c = self.cursor;
-        if c < store.len(self.source_id) {
-            let ch = store.get_slice(self.source_id, c, 1).as_bytes()[0];
-            if ch == m {
-                self.cursor += 1;
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-    */
-
+    // This function is commented out because it could be useful in the future,
+    // but it'd need to be modified to work with post-ASCII characters encoded in UTF-8
     fn lookahead<'a>(&self, source: &'a SourceReadGuard, length: usize) -> Option<&'a str> {
         let c = self.cursor;
         if (c + length) < source.len() {
@@ -281,48 +60,35 @@ impl Scanner {
             None
         }
     }
+    */
 
-    fn peek_byte(&self, source: &SourceReadGuard) -> Option<u8> {
-        let c = self.lookahead(source, 1);
-        match c {
-            None => None,
-            Some(x) => Some(x.as_bytes()[0]),
-        }
+    fn peek_char(&self) -> Option<char> {
+        self.source[self.cursor..].chars().next()
     }
 
-    fn static_token(&mut self, kind: TokenKind) -> Token {
-        let location = SourceLocation {
-            offset: self.cursor - 1,
-            length: 1,
-        };
-        Token { location, kind }
-    }
-
-    fn static_token_length(&mut self, kind: TokenKind, length: usize) -> Token {
-        let location = SourceLocation {
-            offset: self.cursor - length,
-            length,
-        };
+    fn static_token(&mut self, kind: TokenKind, length: usize) -> Token {
+        let location =
+            SourceLocation::new(self.source_id.clone(), (self.cursor - length)..self.cursor);
         Token { location, kind }
     }
 
     fn match_static_token(
         &mut self,
-        source: &SourceReadGuard,
-        m: u8,
+        m: char,
         a: TokenKind,
         b: TokenKind,
-    ) -> Result<Token> {
-        let s = self.lookahead(source, 1);
-        if let Some(s) = s {
-            Ok(if s.as_bytes()[0] == m {
-                self.cursor += 1;
-                self.static_token_length(a, 2)
+        b_length: usize,
+    ) -> Result<Token, result::Error> {
+        if let Some(ch) = self.peek_char() {
+            Ok(if ch == m {
+                let a_length = ch.len_utf8();
+                self.cursor += a_length;
+                self.static_token(a, b_length + a_length)
             } else {
-                self.static_token_length(b, 1)
+                self.static_token(b, b_length)
             })
         } else {
-            Err(Error::Unimplemented(
+            Err(result::Error::Unimplemented(
                 "match_static_token unexpected end of stream",
             ))
         }
@@ -330,70 +96,114 @@ impl Scanner {
 
     fn match_static_operator(
         &mut self,
-        source: &SourceReadGuard,
-        m: u8,
+        m: char,
         a: Operator,
         b: Operator,
-    ) -> Result<Token> {
-        self.match_static_token(source, m, TokenKind::Op(a), TokenKind::Op(b))
+        b_length: usize,
+    ) -> Result<Token, result::Error> {
+        self.match_static_token(m, TokenKind::Op(a), TokenKind::Op(b), b_length)
     }
 
-    fn line_comment(&mut self, source: &SourceReadGuard) -> () {
+    fn line_comment(&mut self) {
         loop {
-            let c = self.advance_byte(source);
-            let c = match c {
-                None => return,
+            let c = match self.advance_char() {
+                None => return, // end of file
                 Some(x) => x,
             };
-            if c == b'\n' {
+            if c == '\n' {
                 self.cursor -= 1;
                 return;
             }
         }
     }
 
-    fn number(&mut self, source: &SourceReadGuard) -> Token {
+    fn block_comment(&mut self, depth: usize) -> Result<(), result::Error> {
+        // TODO: This code seems to work but it's kind of a mess
+        // Maybe come through later and spruce it up so it's less confusing to read
+        // also we don't actually use the depth value at all
+        match self.advance_char() {
+            Some('/') => match self.peek_char() {
+                Some('*') => {
+                    self.cursor += 1;
+                    loop {
+                        match self.advance_char() {
+                            None => {
+                                return Err(result::Error::Unimplemented("Unclosed Block Comment"))
+                            }
+                            Some('*') => match self.peek_char() {
+                                None => {
+                                    return Err(result::Error::Unimplemented(
+                                        "Unclosed Block Comment",
+                                    ))
+                                }
+                                Some('/') => {
+                                    self.cursor += 1;
+                                    return Ok(());
+                                }
+                                Some(_) => continue,
+                            },
+                            Some('/') => match self.peek_char() {
+                                None => {
+                                    return Err(result::Error::Unimplemented(
+                                        "Unclosed Block Comment",
+                                    ))
+                                }
+                                Some('*') => {
+                                    self.cursor -= 1;
+                                    self.block_comment(depth + 1)?;
+                                }
+                                Some(_) => continue,
+                            },
+                            Some(_) => continue,
+                        };
+                    }
+                }
+                Some(_) => Err(result::Error::Unimplemented("not a Block Comment?")),
+                None => Err(result::Error::Unimplemented("Unclosed Block Comment")),
+            },
+            Some(_) => Err(result::Error::Unimplemented("not a Block Comment?")),
+            None => Err(result::Error::Unimplemented("Unclosed Block Comment")),
+        }
+    }
+
+    fn number(&mut self) -> Token {
         let mut length = 0;
         let offset = self.cursor;
 
         let mut decimal = false;
-        loop {
-            let c = self.peek_byte(source);
-            if let Some(c) = c {
-                if let Some(_digit) = (c as char).to_digit(10) {
-                    self.advance_byte(source);
-                    length += 1;
-                } else {
-                    if c == b'.' {
-                        if decimal {
-                            break;
-                        }
-                        self.cursor += 1;
-                        let c = self.peek_byte(source);
-                        if let Some(c) = c {
-                            if (c as char).is_digit(10) {
-                                length += 1;
-                                decimal = true;
-                            } else {
-                                self.cursor -= 1;
-                                break;
-                            }
-                        } else {
-                            self.cursor -= 1;
-                            break;
-                        }
+        while let Some(ch) = self.peek_char() {
+            if let Some(_digit) = ch.to_digit(10) {
+                self.advance_char();
+                length += ch.len_utf8();
+            } else if ch == '.' {
+                if decimal {
+                    break;
+                }
+                self.cursor += ch.len_utf8();
+                if let Some(ch_next) = self.peek_char() {
+                    if ch_next.is_digit(10) {
+                        length += ch_next.len_utf8();
+                        decimal = true;
                     } else {
+                        self.cursor -= ch.len_utf8();
                         break;
                     }
+                } else {
+                    self.cursor -= ch.len_utf8();
+                    break;
                 }
             } else {
                 break;
             }
         }
 
-        let location = SourceLocation { offset, length };
+        let location = SourceLocation::from_range(offset..(offset + length));
 
-        let value = location.get_slice(source).parse::<f64>().ok().unwrap();
+        let value = location
+            .get_slice(&self.source)
+            .parse::<f64>()
+            .ok()
+            .unwrap();
 
         Token {
             location,
@@ -402,22 +212,26 @@ impl Scanner {
     }
 
     /* TODO: add escape sequence(s) at least for double quote */
-    fn string(&mut self, source: &SourceReadGuard) -> Token {
+    fn string(&mut self) -> Token {
         let offset = self.cursor - 1;
         let mut length = 0;
 
         loop {
-            let c = self.peek_byte(source);
+            let c = self.peek_char();
             if let Some(c) = c {
-                self.advance_byte(source);
-                length += 1;
-                if c == b'"' {
+                self.advance_char();
+                length += c.len_utf8();
+                if c == '"' {
                     length += 1;
                     break;
                 }
             } else {
-                length += 1;
-                let location = SourceLocation { offset, length };
+                // FIXME: not sure if this worked before or not?
+                // as of now, an unfinished string hangs the lexer, unless the partial string is length 0
+                // actually this hang is not just unfinished strings, damn
+                //~ length += c.len_utf8();
+                //~ length += 1;
+                let location = SourceLocation::from_range(offset..(offset + length));
                 let token = Token {
                     location,
                     kind: TokenKind::UnfinishedString,
@@ -426,33 +240,33 @@ impl Scanner {
             }
         }
 
-        let location = SourceLocation { offset, length };
+        let location = SourceLocation::from_range(offset..(offset + length));
 
         /*  Even though we're not multi-threaded yet,
             there's no reason to keep the lock longer than necessary
         */
         let sym = {
-            let s = &location.get_slice(source)[1..length - 1];
+            let s = &location.get_slice(&self.source)[1..length - 1];
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(s)
         };
 
         Token {
-            location: location.clone(),
+            location,
             kind: TokenKind::StaticString(sym),
         }
     }
 
-    fn identifier(&mut self, source: &SourceReadGuard) -> Token {
+    fn identifier(&mut self) -> Token {
         let offset = self.cursor;
         let mut length = 0;
 
         loop {
-            let c = self.peek_byte(source);
+            let c = self.peek_char();
             if let Some(c) = c {
-                if is_alphanumeric(c as char) {
-                    self.advance_byte(source);
-                    length += 1;
+                if is_identifier_continue(c) {
+                    self.advance_char();
+                    length += c.len_utf8();
                 } else {
                     break;
                 }
@@ -461,15 +275,16 @@ impl Scanner {
             }
         }
 
-        let location = SourceLocation { offset, length };
+        let location = SourceLocation::from_range(offset..(offset + length));
 
-        let kind = if let Some(word) = reserved_word(location.get_slice(source)) {
+        let slicing = location.get_slice(&self.source);
+
+        let kind = if let Some(word) = string_as_reserved_word(slicing) {
             TokenKind::Reserved(word)
         } else {
             let sym = {
-                let s = location.get_slice(source);
                 let mut interner = INTERNER.write().unwrap();
-                interner.get_or_intern(s)
+                interner.get_or_intern(slicing)
             };
             TokenKind::Identifier(sym)
         };
@@ -477,39 +292,52 @@ impl Scanner {
         Token { location, kind }
     }
 
-    pub fn collect_or_first_error(&mut self) -> Result<Vec<Token>> {
-        let mut v = vec![];
+    pub fn collect_all_tokens(&mut self) -> Result<Vec<Token>, (Vec<Token>, Vec<result::Error>)> {
+        let mut tokens = vec![];
+        let mut errors = None;
+
         loop {
-            match self.scan_token()? {
-                Some(token) => v.push(token),
-                None => break,
+            match self.next() {
+                Some(result_token) => match result_token {
+                    Ok(token) => tokens.push(token),
+                    Err(error) => {
+                        if errors.is_none() {
+                            errors = Some(vec![]);
+                        }
+                        errors.as_mut().unwrap().push(error);
+                    }
+                },
+                None => {
+                    return match errors {
+                        Some(e) => Err((tokens, e)),
+                        None => Ok(tokens),
+                    }
+                }
             }
         }
-        Ok(v)
     }
 
-    pub fn scan_token(&mut self) -> Result<Option<Token>> {
+    fn error_unimplemented(&mut self, s: &'static str) -> result::Error {
+        self.had_error = true;
+        result::Error::Unimplemented(s)
+    }
+
+    fn scan_token(&mut self) -> Result<Option<Token>, result::Error> {
         // TODO:  a big one; need to implement rewinding or some other solution to allow parsing
         // a token that is across multiple lines in interactive mode. need some way to signal EOF
 
-        let current = self.cursor;
-
-        let source = SOURCE.read().unwrap();
-
-        let total_length = source.len();
+        let total_length = self.source.len();
 
         // If we are past the end
-        if current >= total_length {
+        if self.cursor >= total_length {
             self.eof = true;
             return Ok(None);
         }
 
         let token = loop {
-            let first = self.advance_byte(&source);
-
             // If there's no bytes left return None to signal the end
-            let inner = match first {
-                Some(byte) => byte,
+            let inner = match self.advance_char() {
+                Some(ch) => ch,
                 None => {
                     self.eof = true;
                     return Ok(None);
@@ -519,52 +347,58 @@ impl Scanner {
             use Operator::*;
             use TokenKind::*;
             match inner {
-                b'(' => break self.static_token(LeftParen),
-                b')' => break self.static_token(RightParen),
-                b'{' => break self.static_token(LeftBrace),
-                b'}' => break self.static_token(RightBrace),
-                b',' => break self.static_token(Op(Comma)),
-                b'.' => break self.static_token(Op(Dot)),
-                b'-' => break self.static_token(Op(Minus)),
-                b'+' => break self.static_token(Op(Plus)),
-                b';' => break self.static_token(Op(Semicolon)),
-                b'*' => break self.static_token(Op(Star)),
-                b'/' => match self.peek_byte(&source) {
+                '(' => break self.static_token(LeftParen, 1),
+                ')' => break self.static_token(RightParen, 1),
+                '{' => break self.static_token(LeftBrace, 1),
+                '}' => break self.static_token(RightBrace, 1),
+                ',' => break self.static_token(Op(Comma), 1),
+                '.' => break self.static_token(Op(Dot), 1),
+                '-' => break self.static_token(Op(Minus), 1),
+                '+' => break self.static_token(Op(Plus), 1),
+                ';' => break self.static_token(Op(Semicolon), 1),
+                '*' => break self.static_token(Op(Star), 1),
+                '/' => match self.peek_char() {
                     // no bytes left
                     None => {
                         self.eof = true;
                         return Ok(None);
                     }
                     Some(c) => match c {
-                        b'/' => {
-                            self.line_comment(&source);
+                        '/' => {
+                            self.line_comment();
                             continue;
                         }
-                        b'*' => return Err(Error::Unimplemented("Block comments")), // TODO: add block comments here
-                        _ => break self.static_token(Op(Slash)),
+                        '*' => {
+                            self.cursor -= 1;
+                            self.block_comment(0)?;
+                            continue;
+                        }
+
+                        _ => break self.static_token(Op(Slash), 1),
                     },
                 },
-                b'!' => break self.match_static_operator(&source, b'=', BangEqual, Bang)?,
-                b'=' => break self.match_static_operator(&source, b'=', EqualEqual, Equal)?,
-                b'>' => break self.match_static_operator(&source, b'=', GreaterEqual, Greater)?,
-                b'<' => break self.match_static_operator(&source, b'=', LessEqual, Less)?,
-                b'"' => break self.string(&source),
-                c if (c as char).is_whitespace() => {
+                '!' => break self.match_static_operator('=', BangEqual, Bang, 1)?,
+                '=' => break self.match_static_operator('=', EqualEqual, Equal, 1)?,
+                '>' => break self.match_static_operator('=', GreaterEqual, Greater, 1)?,
+                '<' => break self.match_static_operator('=', LessEqual, Less, 1)?,
+                '"' => break self.string(),
+                ch if ch.is_whitespace() => {
                     continue;
                 }
-                c if (c as char).is_digit(10) => {
-                    self.cursor -= 1; // FIXME: maybe should do this another way?
-                    break self.number(&source);
+                ch if ch.is_digit(10) => {
+                    self.cursor -= ch.len_utf8(); // TODO: maybe should do this another way?
+                    break self.number();
                 }
-                c if is_alphanumeric(c as char) => {
-                    self.cursor -= 1;
-                    break self.identifier(&source);
+                ch if is_identifier_start(ch) => {
+                    self.cursor -= ch.len_utf8();
+                    break self.identifier();
                 }
-                // FIXME: This currently treats unrecognized bytes (not chars) as an error.
-                // Perhaps we can push this on to the next phase with some small Unicode awareness.
-                // That would be the first step to having Unicode in the language.
-                // (well second, after refactoring this loop to use chars instead of bytes)
-                _ => return Err(Error::Unimplemented("Unrecognized Character Reached")),
+                // FIXME: This currently treats unrecognized chars as an error.
+                // We now have full support for unicode inside strings, at least.
+                // Perhaps we can add more Unicode awareness.
+                // E.g. using Unicode designations to allow for post-ASCII identifiers.
+                // It's unclear what the benefit of this would be, exactly, especially as no-one is going to use this language
+                _ => return Err(self.error_unimplemented("Unrecognized Character Reached")),
             }
         };
 
@@ -572,34 +406,20 @@ impl Scanner {
     }
 }
 
-impl Iterator for Scanner {
-    type Item = Result<Token>;
+impl Iterator for Scanner<'_> {
+    type Item = Result<Token, result::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        //self.scan_token().transpose()
-        unimplemented!()
+        self.scan_token().transpose()
     }
 }
 
 /*
-enum LoxTokenKind {
-    // Single-character tokens.
-    LeftParen, RightParen, LeftBrace, RightBrace,
-    Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
-
-    // One or two character tokens.
-    Bang, BangEqual,
-    Equal, EqualEqual,
-    Greater, GreaterEqual,
-    Less, LessEqual,
-
-    // Literals.
-    Identifier, String, Number,
-
-    // Keywords.
-    And, Class, Else, False, Fun, For, If, Nil, Or,
-    Print, Return, Super, This, True, Var, While,
-
-    Eof,
+#[derive(Debug, Clone)]
+pub enum Error {
+    UnclosedParenthesis,
+    UnrecognizedCharacters(SourceLocation),
+    ManyErrors(Vec<Error>),
+    Unimplemented(&'static str),
 }
 */

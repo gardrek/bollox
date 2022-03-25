@@ -1,14 +1,15 @@
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
 use crate::object::Object;
 use crate::result::{Error, Result};
+use crate::token::Operator;
 
 pub struct Interpreter {
     // running state here
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new() -> Interpreter {
+        Interpreter {}
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Option<Object>> {
@@ -28,10 +29,10 @@ impl Interpreter {
         Ok(obj)
     }
 
-    fn evaluate<'a>(&mut self, expr: &'a Expr) -> Result<Object> {
-        use crate::scanner::Operator::*;
+    fn evaluate(&mut self, expr: &Expr) -> Result<Object> {
         use ExprKind::*;
         use Object::*;
+        use Operator::*;
         Ok(match expr.kind {
             Literal(ref literal) => literal.clone(),
             Unary(ref operator, ref operand_expr) => {
@@ -131,14 +132,15 @@ impl Interpreter {
                     },
                     BangEqual => Object::Boolean(left != right),
                     EqualEqual => Object::Boolean(left == right),
-                    //Comma,
-                    //Dot,
-                    //Equal,
-                    _ => return Err(Error::Unimplemented("Unimplemented binary operator")),
+                    Comma | Dot | Equal | Semicolon => {
+                        return Err(Error::Unimplemented("Unimplemented binary operator"))
+                    }
+                    Bang => return Err(Error::Ice("op is not a binary operator. bad syntax tree")),
                 }
             }
-            Grouping(ref inside) => self.evaluate(inside.as_ref().clone())?,
-            VariableAccess(_) => unimplemented!(),
+            Grouping(ref inside) => self.evaluate(<&Expr>::clone(&inside.as_ref()))?,
+            //~ Grouping(ref inside) => self.evaluate(<&Expr>::clone(inside.as_ref()))?,
+            //~ VariableAccess(_) => unimplemented!(),
         })
     }
 }

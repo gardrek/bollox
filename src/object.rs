@@ -1,9 +1,10 @@
-//use crate::result::{Error, Result};
-use crate::scanner::{ReservedWord, Token, TokenKind};
+use std::fmt;
+
+use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
 use string_interner::Sym;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Object {
     Nil,
     Boolean(bool),
@@ -13,38 +14,42 @@ pub enum Object {
 
 #[derive(Debug, Clone)]
 pub enum StringKind {
-    Dynamic(String),
+    //~ Dynamic(String),
     Static(Sym),
-    Cons(Box<StringKind>, Box<StringKind>),
+    Cat(Box<StringKind>, Box<StringKind>),
 }
 
 impl StringKind {
-    pub fn to_string(&self) -> String {
-        use StringKind::*;
-        match self {
-            Static(sym) => {
-                let interner = INTERNER.read().unwrap();
-                interner.resolve(*sym).unwrap().into()
-            }
-            Dynamic(s) => s.clone(),
-            Cons(a, b) => format!("{}{}", a.to_string(), b.to_string()),
-        }
-        .into()
-    }
-
     pub fn concat(self, other: Self) -> Self {
         use StringKind::*;
         match (&self, &other) {
-            (Dynamic(_), _) | (_, Dynamic(_)) => unimplemented!(),
-            (_, _) => Cons(Box::new(self), Box::new(other)),
+            //~ (Dynamic(_), _) | (_, Dynamic(_)) => unimplemented!(),
+            (_, _) => Cat(Box::new(self), Box::new(other)),
         }
     }
 }
 
 impl Object {
-    pub fn new_from_token(token: &Token) -> Option<Object> {
+    pub fn from_token(token: &Token) -> Option<Object> {
         use Object::*;
-        Some(match token.kind() {
+        Some(match &token.kind {
+            TokenKind::Number(value) => Number(*value),
+            TokenKind::StaticString(sym) => String(StringKind::Static(*sym)),
+            TokenKind::Reserved(word) => match word {
+                ReservedWord::True => Boolean(true),
+                ReservedWord::False => Boolean(false),
+                ReservedWord::Nil => Nil,
+                _ => return None,
+            },
+            _ => return None,
+        })
+    }
+
+    // TODO: this will be the version of the function if and when we switch the parser to
+    // using the scanner directly instead of a vec<Token>
+    pub fn _from_owned_token(token: Token) -> Option<Object> {
+        use Object::*;
+        Some(match &token.kind {
             TokenKind::Number(value) => Number(*value),
             TokenKind::StaticString(sym) => String(StringKind::Static(*sym)),
             TokenKind::Reserved(word) => match word {
@@ -102,19 +107,41 @@ impl PartialEq for Object {
             (Number(a), Number(b)) => a == b,
             (String(a_kind), String(b_kind)) => match (a_kind, b_kind) {
                 (Static(a), Static(b)) => a == b,
-                (Dynamic(a), Dynamic(b)) => a == b,
-                (Dynamic(a), _) => a == &b_kind.to_string(),
-                (_, Dynamic(b)) => &a_kind.to_string() == b,
-                (Cons(_, _), Cons(_, _)) | (Cons(_, _), _) | (_, Cons(_, _)) => {
+                //~ (Dynamic(a), Dynamic(b)) => a == b,
+                //~ (Dynamic(a), _) => a == &b_kind.to_string(),
+                //~ (_, Dynamic(b)) => &a_kind.to_string() == b,
+                (Cat(_, _), Cat(_, _)) | (Cat(_, _), _) | (_, Cat(_, _)) => {
                     a_kind.to_string() == b_kind.to_string()
                 }
             },
-            (_, _) => false,
+            (Nil, _) => false,
+            (_, Nil) => false,
+            (Boolean(_), _) => false,
+            (_, Boolean(_)) => false,
+            (Number(_), _) => false,
+            (_, Number(_)) => false,
+            //~ (_, _) => false,
         }
     }
 }
 
-use std::fmt;
+impl fmt::Display for StringKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use StringKind::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Static(sym) => {
+                    let interner = INTERNER.read().unwrap();
+                    interner.resolve(*sym).unwrap().into()
+                }
+                //~ Dynamic(s) => s.clone(),
+                Cat(a, b) => format!("{}{}", a, b),
+            }
+        )
+    }
+}
 
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -123,7 +150,19 @@ impl fmt::Display for Object {
             Nil => write!(f, "nil"),
             Boolean(b) => write!(f, "{}", b),
             Number(n) => write!(f, "{}", n),
-            String(kind) => write!(f, "{}", kind.to_string()),
+            String(kind) => write!(f, "{}", kind),
+        }
+    }
+}
+
+impl fmt::Debug for Object {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Object::*;
+        match self {
+            Nil => write!(f, "nil"),
+            Boolean(b) => write!(f, "{:?}", b),
+            Number(n) => write!(f, "{:?}", n),
+            String(kind) => write!(f, "\"{}\"", kind),
         }
     }
 }

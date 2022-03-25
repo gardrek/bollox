@@ -1,0 +1,1 @@
+`bollox` is my attempt at a Lox interpreter, written in Rust. It is based on the first interpreter described by the book Crafting Interpreters. This interpreter was written in Java, so a good deal of changes have been made to the structure to make it more "Rusty".
