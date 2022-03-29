@@ -28,7 +28,7 @@ pub enum TokenKind {
 
     Reserved(ReservedWord),
     // The book has an End of File token, which may come in handy later
-    Eof,
+    //~ Eof,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,8 +112,8 @@ impl TokenKind {
             | (Number(_), Number(_))
             | (StaticString(_), StaticString(_))
             | (UnfinishedString, UnfinishedString)
-            | (Identifier(_), Identifier(_))
-            | (Eof, Eof) => true,
+            | (Identifier(_), Identifier(_)) => true,
+            //~ | (Eof, Eof) => true,
 
             (Reserved(word_a), Reserved(word_b)) => word_a == word_b,
 
@@ -143,9 +143,9 @@ impl TokenKind {
             | (Reserved(_), _)
             | (_, Reserved(_))
             | (Op(_), _)
-            | (_, Op(_))
-            | (Eof, _)
-            | (_, Eof) => false,
+            | (_, Op(_)) => false,
+            //~ | (Eof, _)
+            //~ | (_, Eof) => false,
         }
     }
 }
@@ -243,7 +243,7 @@ impl fmt::Display for Token {
             UnfinishedString => write!(f, "UnfinishedString"),
             Identifier(sym) => write!(f, "ID#{:?}", sym),
             Reserved(word) => write!(f, "#{}", reserved_word_as_string(word)),
-            Eof => write!(f, "[[EOF]]"),
+            //~ Eof => write!(f, "[[EOF]]"),
         }
     }
 }

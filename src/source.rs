@@ -36,11 +36,11 @@ impl SourceLocation {
         SourceLocation { source, range }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn _len(&self) -> usize {
         self.range.len()
     }
 
-    pub fn id(&self) -> &SourceId {
+    pub fn _id(&self) -> &SourceId {
         &self.source
     }
 

@@ -324,13 +324,14 @@ impl Scanner<'_> {
 
     fn do_eof(&mut self) -> Option<Token> {
         self.eof = true;
+        None
         /*
-        //~ let offset = self.cursor;
-        //~ Some(Token {
-            //~ location: SourceLocation::from_range(offset..offset),
-            //~ kind: TokenKind::Eof,
-        //~ })
-        //~ // */ None
+        let offset = self.cursor;
+        Some(Token {
+            location: SourceLocation::from_range(offset..offset),
+            kind: TokenKind::Eof,
+        })
+        // */
     }
 
     fn scan_token(&mut self) -> Result<Option<Token>, result::Error> {
