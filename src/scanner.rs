@@ -322,26 +322,37 @@ impl Scanner<'_> {
         result::Error::Unimplemented(s)
     }
 
+    fn do_eof(&mut self) -> Option<Token> {
+        self.eof = true;
+        //~ /*
+        let offset = self.cursor;
+        Some(Token {
+            location: SourceLocation::from_range(offset..offset),
+            kind: TokenKind::Eof,
+        })
+        // */ None
+    }
+
     fn scan_token(&mut self) -> Result<Option<Token>, result::Error> {
         // TODO:  a big one; need to implement rewinding or some other solution to allow parsing
         // a token that is across multiple lines in interactive mode. need some way to signal EOF
 
+        if self.eof {
+            return Ok(None);
+        }
+
         let total_length = self.source.len();
 
-        // If we are past the end
+        // If we are past the end or already hit eof
         if self.cursor >= total_length {
-            self.eof = true;
-            return Ok(None);
+            return Ok(self.do_eof());
         }
 
         let token = loop {
             // If there's no bytes left return None to signal the end
             let inner = match self.advance_char() {
                 Some(ch) => ch,
-                None => {
-                    self.eof = true;
-                    return Ok(None);
-                }
+                None => return Ok(self.do_eof()),
             };
 
             use Operator::*;
@@ -359,10 +370,7 @@ impl Scanner<'_> {
                 '*' => break self.static_token(Op(Star), 1),
                 '/' => match self.peek_char() {
                     // no bytes left
-                    None => {
-                        self.eof = true;
-                        return Ok(None);
-                    }
+                    None => return Ok(self.do_eof()),
                     Some(c) => match c {
                         '/' => {
                             self.line_comment();

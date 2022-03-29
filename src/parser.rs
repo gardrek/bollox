@@ -74,10 +74,6 @@ impl Parser {
         self.get_token(c)
     }
 
-    fn get_operator(&self) -> Operator {
-        self.peek_previous().unwrap().to_operator()
-    }
-
     fn consume(
         &mut self,
         kinds: &[TokenKind],
@@ -101,13 +97,13 @@ impl Parser {
 
         while let Some(token) = self.peek() {
             if let TokenKind::Op(Operator::Semicolon) = self.peek_previous().unwrap().kind {
-                return;
+                break;
             }
 
             use ReservedWord::*;
             if let TokenKind::Reserved(keyword) = &token.kind {
                 match keyword {
-                    Class | Fun | Var | For | If | While | Print | Return => return,
+                    Class | Fun | Var | For | If | While | Print | Return => break,
                     _ => (),
                 }
             }
@@ -115,10 +111,11 @@ impl Parser {
             self.advance();
         }
     }
+}
 
-    // Recursive Descent
-    // the following functions each represent one rule of the language's grammar
-
+/// ### Recursive Descent
+/// Most of the following functions each represent one rule of the language's grammar
+impl Parser {
     pub fn parse_all(&mut self) -> Result<Vec<Stmt>, ParserError> {
         let mut statements = vec![];
         while !self.is_at_end() {
@@ -129,6 +126,7 @@ impl Parser {
         Ok(statements)
     }
 
+    // equivalent of jlox's parse()
     fn parse_next(&mut self) -> Option<Result<Stmt, ParserError>> {
         if self.is_at_end() {
             return None;
@@ -239,19 +237,24 @@ impl Parser {
         self.equality()
     }
 
+    /// This isn't actually a rule but a helper function used by the separate rules
+    /// for each binary operator function.
     fn binary_op(
         &mut self,
         get_argument: fn(&mut Parser) -> Result<Expr, ParserError>,
         kinds: &[TokenKind],
     ) -> Result<Expr, ParserError> {
         let mut expr = get_argument(self)?;
+        let mut location = expr.location.clone();
 
         while self.check_advance(kinds).is_some() {
-            let location = expr.location.clone();
-            let op = self.get_operator();
+            let op_token = self.peek_previous().unwrap();
+            location = location.combine(&op_token.location);
+            let op = op_token.to_operator();
             let right = get_argument(self)?;
+            location = location.combine(&right.location);
             expr = Expr {
-                location,
+                location: location.clone(),
                 kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
             };
         }
@@ -309,9 +312,12 @@ impl Parser {
             ])
             .is_some()
         {
-            let op = self.get_operator();
+            let op_token = self.peek_previous().unwrap();
+            let mut location = op_token.location.clone();
+            let op = op_token.to_operator();
+
             let right = self.unary()?;
-            let location = right.location.clone();
+            location = location.combine(&right.location.clone());
             return Ok(Expr {
                 location,
                 kind: ExprKind::Unary(op, Box::new(right)),
@@ -369,13 +375,11 @@ impl Iterator for Parser {
 }
 
 /*
-expression     → equality ;
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
-multiplication → unary ( ( "/" | "*" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
-primary        → NUMBER | STRING | "false" | "true" | "nil"
-               | "(" expression ")" ;
+expression      →   equality ;
+equality        →   comparison ( ( "!=" | "==" ) comparison )* ;
+comparison      →   addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+addition        →   multiplication ( ( "-" | "+" ) multiplication )* ;
+multiplication  →   unary ( ( "/" | "*" ) unary )* ;
+unary           →   ( "!" | "-" ) unary  | primary ;
+primary         →   NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" ;
 */

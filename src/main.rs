@@ -94,12 +94,12 @@ fn main() {
     match run() {
         Ok(_) => (),
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("main error: {}", e);
         }
     }
 }
 
-pub fn run_string(source: String, id: usize) -> Result<Option<String>> {
+fn run_string(source: String, id: usize) -> Result<Option<String>> {
     // past me sure did this nonsense
     // FIXME: not sure why i am trying to do this at this point
     {
