@@ -317,7 +317,7 @@ impl Parser {
             let op = op_token.to_operator();
 
             let right = self.unary()?;
-            location = location.combine(&right.location.clone());
+            location = location.combine(&right.location);
             return Ok(Expr {
                 location,
                 kind: ExprKind::Unary(op, Box::new(right)),

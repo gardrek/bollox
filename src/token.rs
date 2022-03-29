@@ -112,8 +112,7 @@ impl TokenKind {
             | (Number(_), Number(_))
             | (StaticString(_), StaticString(_))
             | (UnfinishedString, UnfinishedString)
-            | (Identifier(_), Identifier(_)) => true,
-            //~ | (Eof, Eof) => true,
+            | (Identifier(_), Identifier(_)) => true, //~ | (Eof, Eof) => true,
 
             (Reserved(word_a), Reserved(word_b)) => word_a == word_b,
 
