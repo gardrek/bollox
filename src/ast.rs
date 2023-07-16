@@ -18,6 +18,7 @@ impl Stmt {
 pub enum StmtKind {
     Expr(Expr),
     Print(Expr),
+
     // the Sym is the variable name, the Expr is the initializer
     // TODO: Maybe split this into its own enum when there's more declarations?
     VariableDeclaration(Sym, Option<Expr>),
@@ -33,7 +34,8 @@ pub enum ExprKind {
     Unary(Operator, Box<Expr>),
     Binary(Box<Expr>, Operator, Box<Expr>),
     Grouping(Box<Expr>),
-    //~ VariableAccess(Sym),
+    VariableAccess(Sym),
+    Assign(Sym, Box<Expr>),
 }
 
 impl fmt::Display for Stmt {
@@ -88,7 +90,8 @@ impl fmt::Display for ExprKind {
             Unary(op, expr) => write!(f, "({} {})", op, expr),
             Binary(expr_a, op, expr_b) => write!(f, "({} {} {})", op, expr_a, expr_b),
             Grouping(expr) => write!(f, "(group-expr {})", expr),
-            //~ VariableAccess(sym) => write!(f, "Variable Access ({:?})", sym),
+            VariableAccess(sym) => write!(f, "(var-access {:?})", sym),
+            Assign(sym, expr) => write!(f, "(assign {:?} {})", sym, expr),
         }
     }
 }
@@ -101,7 +104,8 @@ impl fmt::Debug for ExprKind {
             Unary(op, expr) => write!(f, "({:?} {})", op, expr),
             Binary(expr_a, op, expr_b) => write!(f, "({} {:?} {})", expr_a, op, expr_b),
             Grouping(expr) => write!(f, "Grouping Expression ({})", expr),
-            //~ VariableAccess(sym) => write!(f, "Variable Access ({:?})", sym),
+            VariableAccess(sym) => write!(f, "(var-access {:?})", sym),
+            Assign(sym, expr) => write!(f, "(assign {:?} {})", sym, expr),
         }
     }
 }

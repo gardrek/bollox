@@ -161,7 +161,7 @@ impl fmt::Debug for Object {
         match self {
             Nil => write!(f, "nil"),
             Boolean(b) => write!(f, "{:?}", b),
-            Number(n) => write!(f, "{:?}", n),
+            Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
         }
     }

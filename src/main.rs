@@ -58,7 +58,7 @@ fn run() -> GenericResult {
 
     let mut stdout = io::BufWriter::new(io::stdout());
 
-    match args.len() {
+    let result: std::result::Result<(), crate::result::Error> = match args.len() {
         // If no arguments, run interactively
         1 => {
             let mut stdin = io::BufReader::new(io::stdin());
@@ -70,9 +70,9 @@ fn run() -> GenericResult {
                 stdin.read_line(&mut input)?;
                 next_source_id += 1;
                 match run_string(input, next_source_id) {
-                    Ok(Some(res)) => writeln!(stdout, "{}", res)?,
+                    Ok(Some(res)) => writeln!(stdout, "eyoooo? {}", res)?,
                     Ok(None) => (),
-                    Err(res) => writeln!(stdout, "{:?}", res)?,
+                    Err(res) => writeln!(stdout, "eyoooo {:?}", res)?,
                 }
                 stdout.flush()?;
             }
@@ -81,12 +81,33 @@ fn run() -> GenericResult {
         // If a filename is given, run it as a script
         2 => {
             let source = fs::read_to_string(Path::new(&args[1]))?;
-            run_string(source, 0)?;
+            let result = run_string(source.clone(), 0);
+            match &result {
+                Err(e) => eprintln!(
+                    "error on line {:?}",
+                    crate::source::SourceLocation::error_line_number(e, &source.clone())
+                ),
+                _ => (),
+            }
             stdout.flush()?;
-            Ok(())
+            match result {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            }
         }
 
         _ => Err(result::Error::Usage.into()),
+    };
+
+    match result {
+        Ok(_o) => Ok(()),
+        Err(e) => {
+            match e.get_location() {
+                Some(loc) => eprintln!("{} at {}", e, loc),
+                _ => eprintln!("{:?}", e),
+            }
+            Ok(())
+        }
     }
 }
 
@@ -107,7 +128,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         source_ref.push_str(&source);
     }
 
-    let mut sc = Scanner::new(SourceId(id));
+    let mut sc = Scanner::new(&source, SourceId(id));
     //~ let tokens = sc.collect_or_first_error()?;
 
     //~ let (tokens, errors) = sc.collect_all_tokens_and_errors();
@@ -138,6 +159,8 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
     let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
 
+    eprintln!("TF");
+
     let mut interpreter = Interpreter::new();
 
     if let Some(obj) = interpreter.interpret(statements)? {
@@ -146,19 +169,5 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         Ok(Some(s))
     } else {
         Ok(None)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn exploration() {
-        assert_eq!(2 + 2, 4);
-    }
-
-    #[test]
-    #[should_panic]
-    fn another() {
-        panic!("Make this test fail");
     }
 }

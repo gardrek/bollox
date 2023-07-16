@@ -1,8 +1,7 @@
 use crate::result;
-use crate::source::{SourceId, SourceLocation, SourceReadGuard};
+use crate::source::{SourceId, SourceLocation};
 use crate::token::{string_as_reserved_word, Operator, Token, TokenKind};
 use crate::INTERNER;
-use crate::SOURCE;
 
 fn is_identifier_start(c: char) -> bool {
     c.is_ascii_alphabetic() || c == '_'
@@ -16,7 +15,7 @@ fn is_identifier_continue(c: char) -> bool {
 
 pub struct Scanner<'a> {
     // this is how we get the source file
-    source: SourceReadGuard<'a>,
+    source: &'a str,
     // ID for the source
     source_id: SourceId,
     // location, in bytes which we're currently looking at
@@ -27,10 +26,10 @@ pub struct Scanner<'a> {
     had_error: bool,
 }
 
-impl Scanner<'_> {
-    pub fn new(source_id: SourceId) -> Scanner<'static> {
+impl<'a> Scanner<'a> {
+    pub fn new(source: &'a str, source_id: SourceId) -> Scanner<'a> {
         Scanner {
-            source: SOURCE.read().unwrap(),
+            source,
             source_id,
             cursor: 0,
             eof: false,

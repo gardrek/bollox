@@ -1,5 +1,5 @@
+use crate::interpreter::RuntimeError;
 use crate::source::SourceLocation;
-use crate::token::Token;
 use std::fmt;
 use std::io;
 
@@ -12,14 +12,11 @@ pub enum Error {
     Usage,
     //~ Io(io::Error),
     Io,
-    UnclosedParenthesis,
-    ExpectedSemicolon,
-    ExpectedIdentifier,
-    UnexpectedToken(Token),
     Unimplemented(&'static str),
-    Ice(&'static str),
-    Runtime(&'static str),
+    //~ Ice(&'static str),
+    Runtime(RuntimeError),
     ManyErrors(Vec<Error>),
+    Parser(crate::parser::ParseError),
     //SyntaxError(SourceLocation<'static>),
     //Other(Box<dyn std::error::Error>),
 }
@@ -27,6 +24,16 @@ pub enum Error {
 impl Error {
     fn _report(&self, location: &SourceLocation) {
         eprintln!("{} at {}", self, location)
+    }
+
+    pub fn get_location(&self) -> Option<&SourceLocation> {
+        Some(match self {
+            Self::Parser(e) => &e.location,
+            e => {
+                eprintln!("error location unimplemented for {}", e);
+                return None;
+            }
+        })
     }
 }
 
@@ -47,14 +54,15 @@ Usage:
     bollox                  Run in interactive mode"
             ),
             Io => write!(f, "IO Error"),
-            UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
-            ExpectedSemicolon => write!(f, "Expected Semicolon"),
-            ExpectedIdentifier => write!(f, "Expected Identifier"),
-            UnexpectedToken(t) => write!(f, "Expected Token {:?}", t),
+            //~ UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
+            //~ ExpectedSemicolon => write!(f, "Expected Semicolon"),
+            //~ ExpectedIdentifier => write!(f, "Expected Identifier"),
+            //~ UnexpectedToken(t) => write!(f, "Expected Token {:?}", t),
             Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
-            Ice(s) => write!(f, "ICE: {}", s),
-            Runtime(s) => write!(f, "Runtime Error: {}", s),
+            //~ Ice(s) => write!(f, "ICE: {}", s),
+            Runtime(s) => write!(f, "{}", s),
             ManyErrors(_) => write!(f, "Many Errors"),
+            Parser(st) => write!(f, "{}", st),
             //SyntaxError(location) => write!(f, "Syntax Error:\n{}", location),
             //Other(_) => write!(f, "{}", self),
         }
