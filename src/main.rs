@@ -81,22 +81,25 @@ fn run() -> GenericResult {
         // If a filename is given, run it as a script
         2 => {
             let source = fs::read_to_string(Path::new(&args[1]))?;
+
             let result = run_string(source.clone(), 0);
-            match &result {
-                Err(e) => eprintln!(
+
+            if let Err(e) = &result {
+                eprintln!(
                     "error on line {:?}",
-                    crate::source::SourceLocation::error_line_number(e, &source.clone())
-                ),
-                _ => (),
+                    crate::source::SourceLocation::error_line_number(e, &source)
+                )
             }
+
             stdout.flush()?;
+
             match result {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e),
             }
         }
 
-        _ => Err(result::Error::Usage.into()),
+        _ => Err(result::Error::Usage),
     };
 
     match result {
@@ -148,6 +151,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         }
     }
 
+    /*
     for tk in &tokens {
         eprint!("{} ", tk);
         //~ eprintln!();
@@ -155,11 +159,10 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         //~ eprintln!();
     }
     eprintln!();
+    */
 
     let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
-
-    eprintln!("TF");
 
     let mut interpreter = Interpreter::new();
 

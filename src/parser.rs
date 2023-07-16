@@ -8,6 +8,7 @@ pub enum ParseErrorKind {
     //~ Unimplemented(&'static str),
     ExpectedIdentifier,
     ExpectedSemicolon,
+    ExpectedRightBrace,
     Ice(&'static str),
     UnclosedParenthesis,
     UnexpectedToken(Token),
@@ -46,6 +47,7 @@ impl core::fmt::Display for ParseErrorKind {
             //~ Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
             ExpectedIdentifier => write!(f, "Expected Identifier"),
             ExpectedSemicolon => write!(f, "Expected Semicolon"),
+            ExpectedRightBrace => write!(f, "Expected Ending Brace"),
             Ice(s) => write!(f, "Internal Compiler Error: {}", s),
             UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
             UnexpectedToken(t) => write!(f, "Unexpected Token {:?}", t),
@@ -165,6 +167,31 @@ impl Parser {
             self.advance();
         }
     }
+
+    /// This is a helper function used by the separate rules
+    /// for each binary operator function.
+    fn binary_op(
+        &mut self,
+        get_argument: fn(&mut Parser) -> Result<Expr, ParseErrorKind>,
+        kinds: &[TokenKind],
+    ) -> Result<Expr, ParseErrorKind> {
+        let mut expr = get_argument(self)?;
+        let mut location = expr.location.clone();
+
+        while self.check_advance(kinds).is_some() {
+            let op_token = self.peek_previous().unwrap();
+            location = location.combine(&op_token.location);
+            let op = op_token.to_operator();
+            let right = get_argument(self)?;
+            location = location.combine(&right.location);
+            expr = Expr {
+                location: location.clone(),
+                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+            };
+        }
+
+        Ok(expr)
+    }
 }
 
 /// ### Recursive Descent
@@ -186,35 +213,31 @@ impl Parser {
             return None;
         }
 
-        if let Some(r_stmt) = self.declaration() {
-            match r_stmt {
-                Ok(stmt) => return Some(Ok(stmt)),
-                Err(kind) => {
-                    //~ self.errors.push(e);
-                    //~ self.synchronize();
-                    //~ unimplemented!()
-                    //~ return None
-                    let t = match self.peek() {
-                        Some(t) => t,
-                        None => {
-                            let location = SourceLocation::bullshit();
-                            return Some(Err(ParseError { location, kind }));
-                        }
-                    };
+        match self.declaration() {
+            Ok(stmt) => Some(Ok(stmt)),
+            Err(kind) => {
+                //~ self.errors.push(e);
+                //~ self.synchronize();
+                //~ unimplemented!()
+                //~ return None
+                let t = match self.peek() {
+                    Some(t) => t,
+                    None => {
+                        let location = SourceLocation::bullshit();
+                        return Some(Err(ParseError { location, kind }));
+                    }
+                };
 
-                    let location = t.location.clone();
+                let location = t.location.clone();
 
-                    let e = ParseError { location, kind };
+                let e = ParseError { location, kind };
 
-                    return Some(Err(e));
-                }
+                Some(Err(e))
             }
-        } else {
-            None
         }
     }
 
-    fn declaration(&mut self) -> Option<Result<Stmt, ParseErrorKind>> {
+    fn declaration(&mut self) -> Result<Stmt, ParseErrorKind> {
         let maybe = if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
             .is_some()
@@ -224,14 +247,14 @@ impl Parser {
             self.statement()
         };
         match maybe {
-            Ok(v) => Some(Ok(v)),
+            Ok(v) => Ok(v),
             Err(e) => {
                 // TODO: FIXME: commenting this out has fixed our problem i suppose.
                 // so this funciton is where the problem is, maybe?
                 //~ self.synchronize();
                 //Some(Err(ParseErrorKind::Unimplemented("Declaration synchronize hit")))
                 eprintln!("Synchro branch");
-                Some(Err(e))
+                Err(e)
             }
         }
     }
@@ -264,16 +287,6 @@ impl Parser {
         Ok(Stmt::new(StmtKind::VariableDeclaration(sym, initializer)))
     }
 
-    /*
-    program     → declaration* EOF ;
-
-    declaration → varDecl
-                | statement ;
-
-    statement   → exprStmt
-                | printStmt ;
-                */
-
     fn statement(&mut self) -> Result<Stmt, ParseErrorKind> {
         if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Print)])
@@ -281,7 +294,73 @@ impl Parser {
         {
             return self.print_statement();
         }
+
+        if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::If)])
+            .is_some()
+        {
+            return self.rust_style_if_statement();
+        }
+
+        if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+            return Ok(Stmt::new(StmtKind::Block(self.block()?)));
+        }
+
         self.expression_statement()
+    }
+
+    fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedSemicolon)?;
+
+        let condition = self.expression()?;
+
+        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedSemicolon)?;
+
+        let then_branch = self.statement()?;
+
+        let else_branch = if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
+            .is_some()
+        {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+
+        Ok(Stmt::new(StmtKind::If(
+            condition,
+            Box::new(then_branch),
+            else_branch,
+        )))
+    }
+
+    fn rust_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        let condition = self.expression()?;
+
+        let then_block = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+            Stmt::new(StmtKind::Block(self.block()?))
+        } else {
+            panic!()
+        };
+
+        let else_block = if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
+            .is_some()
+        {
+            if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+                Some(Box::new(Stmt::new(StmtKind::Block(self.block()?))))
+            } else {
+                panic!()
+            }
+        } else {
+            None
+        };
+
+        Ok(Stmt::new(StmtKind::If(
+            condition,
+            Box::new(then_block),
+            else_block,
+        )))
     }
 
     fn print_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
@@ -291,6 +370,18 @@ impl Parser {
             ParseErrorKind::ExpectedSemicolon,
         )?;
         Ok(Stmt::new(StmtKind::Print(expr)))
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>, ParseErrorKind> {
+        let mut stmts = vec![];
+
+        while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        self.consume(&[TokenKind::RightBrace], ParseErrorKind::ExpectedRightBrace)?;
+
+        Ok(stmts)
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
@@ -307,46 +398,55 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseErrorKind> {
-        let expr = self.equality()?;
+        let expr = self.logical_or()?;
 
         // TODO: refactor to use check_advance
-        if let Some(token) = self.peek() {
-            if token.in_kinds(&[TokenKind::Op(Operator::Equal)]) {
-                self.advance();
-                let value = self.assignment();
+        if self
+            .check_advance(&[TokenKind::Op(Operator::Equal)])
+            .is_some()
+        {
+            let value = self.assignment();
 
-                return Ok(match expr.kind {
-                    ExprKind::VariableAccess(name) => Expr {
-                        location: expr.location.clone(),
-                        kind: ExprKind::Assign(name, Box::new(value?)),
-                    },
-                    _ => panic!("invalid assignment target"),
-                });
-            }
+            return Ok(match expr.kind {
+                ExprKind::VariableAccess(name) => Expr {
+                    location: expr.location,
+                    kind: ExprKind::Assign(name, Box::new(value?)),
+                },
+                _ => panic!("invalid assignment target"),
+            });
         }
 
         Ok(expr)
     }
 
-    /// This isn't actually a rule but a helper function used by the separate rules
-    /// for each binary operator function.
-    fn binary_op(
-        &mut self,
-        get_argument: fn(&mut Parser) -> Result<Expr, ParseErrorKind>,
-        kinds: &[TokenKind],
-    ) -> Result<Expr, ParseErrorKind> {
-        let mut expr = get_argument(self)?;
-        let mut location = expr.location.clone();
+    fn logical_or(&mut self) -> Result<Expr, ParseErrorKind> {
+        let mut expr = self.logical_and()?;
 
-        while self.check_advance(kinds).is_some() {
-            let op_token = self.peek_previous().unwrap();
-            location = location.combine(&op_token.location);
-            let op = op_token.to_operator();
-            let right = get_argument(self)?;
-            location = location.combine(&right.location);
+        while let Some(operator) = self.check_advance(&[TokenKind::Reserved(ReservedWord::Or)]) {
+            let location = operator.location.clone();
+
+            let right = self.logical_and()?;
+
             expr = Expr {
-                location: location.clone(),
-                kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
+                location,
+                kind: ExprKind::LogicalOr(Box::new(expr), Box::new(right)),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> Result<Expr, ParseErrorKind> {
+        let mut expr = self.equality()?;
+
+        while let Some(operator) = self.check_advance(&[TokenKind::Reserved(ReservedWord::And)]) {
+            let location = operator.location.clone();
+
+            let right = self.equality()?;
+
+            expr = Expr {
+                location,
+                kind: ExprKind::LogicalAnd(Box::new(expr), Box::new(right)),
             };
         }
 

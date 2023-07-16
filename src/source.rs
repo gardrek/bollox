@@ -31,9 +31,9 @@ impl SourceLocation {
                 if loc.range.start == index {
                     break 'l line_number;
                 }
-                match byte {
-                    b'\n' => line_number += 1,
-                    _ => (),
+
+                if *byte == b'\n' {
+                    line_number += 1;
                 }
             }
 

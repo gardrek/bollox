@@ -116,7 +116,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn block_comment(&mut self, depth: usize) -> Result<(), result::Error> {
+    fn block_comment(&mut self) -> Result<(), result::Error> {
         // TODO: This code seems to work but it's kind of a mess
         // Maybe come through later and spruce it up so it's less confusing to read
         // also we don't actually use the depth value at all
@@ -149,7 +149,7 @@ impl<'a> Scanner<'a> {
                                 }
                                 Some('*') => {
                                     self.cursor -= 1;
-                                    self.block_comment(depth + 1)?;
+                                    self.block_comment()?;
                                 }
                                 Some(_) => continue,
                             },
@@ -180,7 +180,7 @@ impl<'a> Scanner<'a> {
                 }
                 self.cursor += ch.len_utf8();
                 if let Some(ch_next) = self.peek_char() {
-                    if ch_next.is_digit(10) {
+                    if ch_next.is_ascii_digit() {
                         length += ch_next.len_utf8();
                         decimal = true;
                     } else {
@@ -198,11 +198,7 @@ impl<'a> Scanner<'a> {
 
         let location = SourceLocation::from_range(offset..(offset + length));
 
-        let value = location
-            .get_slice(&self.source)
-            .parse::<f64>()
-            .ok()
-            .unwrap();
+        let value = location.get_slice(self.source).parse::<f64>().ok().unwrap();
 
         Token {
             location,
@@ -245,7 +241,7 @@ impl<'a> Scanner<'a> {
             there's no reason to keep the lock longer than necessary
         */
         let sym = {
-            let s = &location.get_slice(&self.source)[1..length - 1];
+            let s = &location.get_slice(self.source)[1..length - 1];
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(s)
         };
@@ -276,7 +272,7 @@ impl<'a> Scanner<'a> {
 
         let location = SourceLocation::from_range(offset..(offset + length));
 
-        let slicing = location.get_slice(&self.source);
+        let slicing = location.get_slice(self.source);
 
         let kind = if let Some(word) = string_as_reserved_word(slicing) {
             TokenKind::Reserved(word)
@@ -378,7 +374,7 @@ impl<'a> Scanner<'a> {
                         }
                         '*' => {
                             self.cursor -= 1;
-                            self.block_comment(0)?;
+                            self.block_comment()?;
                             continue;
                         }
 
@@ -393,7 +389,7 @@ impl<'a> Scanner<'a> {
                 ch if ch.is_whitespace() => {
                     continue;
                 }
-                ch if ch.is_digit(10) => {
+                ch if ch.is_ascii_digit() => {
                     self.cursor -= ch.len_utf8(); // TODO: maybe should do this another way?
                     break self.number();
                 }

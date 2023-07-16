@@ -6,22 +6,59 @@ use crate::token::Operator;
 use std::collections::HashMap;
 use string_interner::Sym;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Environment {
-    globals: HashMap<Sym, Object>,
+    enclosing: Option<Box<Environment>>,
+    bindings: HashMap<Sym, Object>,
+}
+
+pub struct Interpreter {
+    // running state here
+    environment: Environment,
 }
 
 impl Environment {
-    fn set(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-        self.globals.insert(sym, obj)
+    fn new_inner(self) -> Environment {
+        Environment {
+            enclosing: Some(Box::new(self)),
+            bindings: HashMap::default(),
+        }
+    }
+
+    fn declare(&mut self, sym: Sym, obj: Object) -> Option<Object> {
+        self.bindings.insert(sym, obj)
+    }
+
+    fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
+        if self.bindings.contains_key(&sym) {
+            self.bindings.insert(sym, obj)
+        } else if let Some(enc) = &mut self.enclosing {
+            enc.assign(sym, obj)
+        } else {
+            None
+        }
     }
 
     fn is_defined(&self, sym: &Sym) -> bool {
-        self.globals.contains_key(sym)
+        if self.bindings.contains_key(sym) {
+            true
+        } else if let Some(enc) = &self.enclosing {
+            enc.is_defined(sym)
+        } else {
+            false
+        }
     }
 
     fn get_by_sym(&self, sym: &Sym) -> Option<&Object> {
-        self.globals.get(sym)
+        let obj = self.bindings.get(sym);
+
+        if obj.is_some() {
+            obj
+        } else if let Some(enc) = &self.enclosing {
+            enc.get_by_sym(sym)
+        } else {
+            None
+        }
     }
 
     /*
@@ -36,17 +73,12 @@ impl Environment {
             }
         };
 
-        match self.globals.get(&sym) {
+        match self.bindings.get(&sym) {
             Some(obj) => Ok(obj),
             None => Err(RuntimeError::undefined_variable(token.location.clone())),
         }
     }
     */
-}
-
-pub struct Interpreter {
-    // running state here
-    environment: Environment,
 }
 
 impl Interpreter {
@@ -59,7 +91,7 @@ impl Interpreter {
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Option<Object>, RuntimeError> {
         let mut obj = None;
         for statement in statements {
-            eprintln!("{}", statement);
+            //~ eprintln!("{}", statement);
             use StmtKind::*;
             obj = match statement.kind {
                 Expr(expr) => Some(self.evaluate(&expr)?),
@@ -72,12 +104,54 @@ impl Interpreter {
                         Some(init) => self.evaluate(&init)?,
                         None => Object::Nil,
                     };
-                    self.environment.set(sym, obj);
+                    self.environment.declare(sym, obj);
+                    None
+                }
+                Block(stmts) => {
+                    let environment = std::mem::take(&mut self.environment);
+                    let (environment, err) = self.execute_block(stmts, environment.new_inner());
+                    self.environment = environment;
+                    if let Some(e) = err {
+                        return Err(e);
+                    }
+                    None
+                }
+                If(cond, then_block, else_block) => {
+                    if self.evaluate(&cond)?.is_truthy() {
+                        self.interpret(vec![*then_block])?;
+                    } else if let Some(e) = else_block {
+                        self.interpret(vec![*e])?;
+                    }
                     None
                 }
             };
         }
         Ok(obj)
+    }
+
+    fn execute_block(
+        &mut self,
+        stmts: Vec<Stmt>,
+        environment: Environment,
+        //~ ) -> Result<(), RuntimeError> {
+    ) -> (Environment, Option<RuntimeError>) {
+        self.environment = environment;
+
+        let result = self.interpret(stmts);
+
+        let environment = std::mem::take(&mut self.environment);
+
+        let env = match environment.enclosing {
+            Some(e) => *e,
+            None => panic!(),
+        };
+
+        let err = match result {
+            Ok(_) => None,
+            Err(e) => Some(e),
+        };
+
+        (env, err)
     }
 
     fn evaluate(&mut self, expr: &Expr) -> Result<Object, RuntimeError> {
@@ -266,7 +340,7 @@ impl Interpreter {
                     }
                 }
             }
-            Grouping(inside) => self.evaluate(inside.clone())?,
+            Grouping(inside) => self.evaluate(inside)?,
             VariableAccess(sym) => self
                 .environment
                 .get_by_sym(sym)
@@ -276,13 +350,31 @@ impl Interpreter {
                 if self.environment.is_defined(sym) {
                     let value = self.evaluate(expr)?;
 
-                    self.environment.set(*sym, value.clone());
+                    self.environment.assign(*sym, value.clone());
 
                     value
                 } else {
-                    return Err(RuntimeError::undefined_variable(expr.location.clone()))
+                    return Err(RuntimeError::undefined_variable(expr.location.clone()));
                 }
             }
+            LogicalOr(left, right) => {
+                let value = self.evaluate(left)?;
+
+                if value.is_truthy() {
+                    return Ok(value);
+                }
+
+                self.evaluate(right)?
+            },
+            LogicalAnd(left, right) => {
+                let value = self.evaluate(left)?;
+
+                if !value.is_truthy() {
+                    return Ok(value);
+                }
+
+                self.evaluate(right)?
+            },
         })
     }
 }
@@ -340,7 +432,7 @@ impl RuntimeError {
 
 impl From<RuntimeError> for crate::result::Error {
     fn from(error: RuntimeError) -> Self {
-        crate::result::Error::Runtime(error.clone())
+        crate::result::Error::Runtime(error)
     }
 }
 
