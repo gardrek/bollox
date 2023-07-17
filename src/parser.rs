@@ -156,23 +156,23 @@ impl Parser {
         &mut self,
         kinds: &[TokenKind],
         err: ParseErrorKind,
-    ) -> Result<Option<&Token>, ParseErrorKind> {
+    ) -> Result<Option<&Token>, ParseError> {
         if self.check(kinds) {
             Ok(self.advance())
         } else {
-            Err(err)
+            Err(self.error(err))
         }
     }
 
-    fn consume_expected(&mut self, kinds: &[TokenKind]) -> Result<Option<&Token>, ParseErrorKind> {
+    fn consume_expected(&mut self, kinds: &[TokenKind]) -> Result<Option<&Token>, ParseError> {
         if self.advance().is_some() {
             if self.check(kinds) {
                 Ok(self.peek())
             } else {
-                Err(ParseErrorKind::ExpectedToken(
+                Err(self.error(ParseErrorKind::ExpectedToken(
                     kinds.to_owned(),
                     self.peek().cloned(),
-                ))
+                )))
             }
         } else {
             Ok(None)
@@ -219,9 +219,9 @@ impl Parser {
     /// for each binary operator function.
     fn binary_op(
         &mut self,
-        get_argument: fn(&mut Parser) -> Result<Expr, ParseErrorKind>,
+        get_argument: fn(&mut Parser) -> Result<Expr, ParseError>,
         kinds: &[TokenKind],
-    ) -> Result<Expr, ParseErrorKind> {
+    ) -> Result<Expr, ParseError> {
         let mut expr = get_argument(self)?;
         let mut location = expr.location.clone();
 
@@ -262,7 +262,7 @@ impl Parser {
 
         match self.declaration() {
             Ok(stmt) => Some(Ok(stmt)),
-            Err(kind) => {
+            Err(err) => {
                 //~ self.errors.push(e);
                 //~ self.synchronize();
                 //~ unimplemented!()
@@ -271,20 +271,20 @@ impl Parser {
                     Some(t) => t,
                     None => {
                         let location = SourceLocation::bullshit();
-                        return Some(Err(ParseError { location, kind }));
+                        return Some(Err(ParseError { location, kind: err.kind }));
                     }
                 };
 
                 let location = t.location.clone();
 
-                let e = ParseError { location, kind };
+                let e = ParseError { location, kind: err.kind };
 
                 Some(Err(e))
             }
         }
     }
 
-    fn declaration(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
         let maybe = if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
             .is_some()
@@ -306,14 +306,14 @@ impl Parser {
         }
     }
 
-    fn variable_declaration(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn variable_declaration(&mut self) -> Result<Stmt, ParseError> {
         let sym = self
             .peek()
             .and_then(|t| match &t.kind {
                 TokenKind::Identifier(sym) => Some(*sym),
                 _ => None,
             })
-            .ok_or(ParseErrorKind::ExpectedIdentifier)?;
+            .ok_or(self.error(ParseErrorKind::ExpectedIdentifier))?;
 
         self.advance();
 
@@ -334,7 +334,7 @@ impl Parser {
         Ok(Stmt::new(StmtKind::VariableDeclaration(sym, initializer)))
     }
 
-    fn statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
         if let Some(token) = self.check_advance(&[
             TokenKind::Reserved(ReservedWord::For),
             TokenKind::Reserved(ReservedWord::If),
@@ -363,7 +363,7 @@ impl Parser {
         self.expression_statement()
     }
 
-    fn for_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn for_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
 
         let initializer = if self
@@ -428,11 +428,11 @@ impl Parser {
         })
     }
 
-    fn if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn if_statement(&mut self) -> Result<Stmt, ParseError> {
         self._rust_style_if_statement()
     }
 
-    fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
 
         let condition = self.expression()?;
@@ -453,14 +453,14 @@ impl Parser {
         Ok(Stmt::new(StmtKind::If(condition, then_branch, else_branch)))
     }
 
-    fn _rust_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn _rust_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
         let condition = self.expression()?;
 
         //~ /*
         let then_block = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
             Box::new(Stmt::new(StmtKind::Block(self.block()?)))
         } else {
-            return Err(ParseErrorKind::ExpectedLeftBrace);
+            return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         };
         //~ */
         //~ self.consume_expected(&[TokenKind::LeftBrace])?;
@@ -488,7 +488,7 @@ impl Parser {
         Ok(Stmt::new(StmtKind::If(condition, then_block, else_block)))
     }
 
-    fn print_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn print_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
         self.consume(
             &[TokenKind::Op(Operator::Semicolon)],
@@ -497,11 +497,11 @@ impl Parser {
         Ok(Stmt::new(StmtKind::Print(expr)))
     }
 
-    fn while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn while_statement(&mut self) -> Result<Stmt, ParseError> {
         self._rust_style_while_statement()
     }
 
-    fn _c_style_while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn _c_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
 
         let condition = self.expression()?;
@@ -513,19 +513,19 @@ impl Parser {
         Ok(Stmt::new(StmtKind::While(condition, body)))
     }
 
-    fn _rust_style_while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn _rust_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
         let condition = self.expression()?;
 
         let body = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
             Box::new(Stmt::new(StmtKind::Block(self.block()?)))
         } else {
-            return Err(ParseErrorKind::ExpectedLeftBrace);
+            return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         };
 
         Ok(Stmt::new(StmtKind::While(condition, body)))
     }
 
-    fn block(&mut self) -> Result<Vec<Stmt>, ParseErrorKind> {
+    fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut stmts = vec![];
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
@@ -537,7 +537,7 @@ impl Parser {
         Ok(stmts)
     }
 
-    fn expression_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
         self.consume(
             &[TokenKind::Op(Operator::Semicolon)],
@@ -546,11 +546,11 @@ impl Parser {
         Ok(Stmt::new(StmtKind::Expr(expr)))
     }
 
-    fn expression(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn expression(&mut self) -> Result<Expr, ParseError> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
         let expr = self.logical_or()?;
 
         if self
@@ -571,7 +571,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn logical_or(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn logical_or(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.logical_and()?;
 
         while let Some(operator) = self.check_advance(&[TokenKind::Reserved(ReservedWord::Or)]) {
@@ -588,7 +588,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn logical_and(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn logical_and(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.equality()?;
 
         while let Some(operator) = self.check_advance(&[TokenKind::Reserved(ReservedWord::And)]) {
@@ -605,7 +605,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn equality(&mut self) -> Result<Expr, ParseError> {
         self.binary_op(
             Parser::comparison,
             &[
@@ -615,7 +615,7 @@ impl Parser {
         )
     }
 
-    fn comparison(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn comparison(&mut self) -> Result<Expr, ParseError> {
         self.binary_op(
             Parser::addition,
             &[
@@ -627,7 +627,7 @@ impl Parser {
         )
     }
 
-    fn addition(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn addition(&mut self) -> Result<Expr, ParseError> {
         self.binary_op(
             Parser::multiplication,
             &[
@@ -637,7 +637,7 @@ impl Parser {
         )
     }
 
-    fn multiplication(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn multiplication(&mut self) -> Result<Expr, ParseError> {
         self.binary_op(
             Parser::unary,
             &[
@@ -647,7 +647,7 @@ impl Parser {
         )
     }
 
-    fn unary(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn unary(&mut self) -> Result<Expr, ParseError> {
         if self
             .check_advance(&[
                 TokenKind::Op(Operator::Bang),
@@ -671,7 +671,7 @@ impl Parser {
         self.call()
     }
 
-    fn call(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn call(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.primary()?;
 
         loop {
@@ -685,7 +685,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseErrorKind> {
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
         let mut arguments = vec![];
 
         if !self.check(&[TokenKind::RightParen]) {
@@ -713,10 +713,10 @@ impl Parser {
         })
     }
 
-    fn primary(&mut self) -> Result<Expr, ParseErrorKind> {
+    fn primary(&mut self) -> Result<Expr, ParseError> {
         // TODO: refactor to remove unwrap
         if self.peek().is_none() {
-            return Err(ParseErrorKind::Ice("Unexpected end of Token stream"));
+            return Err(self.error(ParseErrorKind::Ice("Unexpected end of Token stream")));
         }
 
         let next_token = self.peek().unwrap();
@@ -759,7 +759,7 @@ impl Parser {
                         kind: ExprKind::VariableAccess(sym),
                     })
                 }
-                _ => Err(ParseErrorKind::UnexpectedToken(next_token.clone())),
+                _ => Err(self.error(ParseErrorKind::UnexpectedToken(next_token.clone()))),
             }
         }
     }
