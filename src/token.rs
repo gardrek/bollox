@@ -219,17 +219,15 @@ pub fn operator_as_string(s: &Operator) -> &'static str {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        /*
-        write!(
-            f,
-            "Token {:?} at {}, length {}",
-            self.kind, self.location.offset, self.location.length,
-        )
-        */
+        write!(f, "{}", self.kind)
+    }
+}
 
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use TokenKind::*;
 
-        match &self.kind {
+        match &self {
             LeftParen => write!(f, "("),
             RightParen => write!(f, ")"),
             LeftBrace => write!(f, "{{"),
@@ -242,7 +240,6 @@ impl fmt::Display for Token {
             UnfinishedString => write!(f, "UnfinishedString"),
             Identifier(sym) => write!(f, "ID#{:?}", sym),
             Reserved(word) => write!(f, "#{}", reserved_word_as_string(word)),
-            //~ Eof => write!(f, "[[EOF]]"),
         }
     }
 }

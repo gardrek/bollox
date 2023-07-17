@@ -8,10 +8,14 @@ pub enum ParseErrorKind {
     //~ Unimplemented(&'static str),
     ExpectedIdentifier,
     ExpectedSemicolon,
+    ExpectedLeftBrace,
     ExpectedRightBrace,
+    ExpectedLeftParen,
+    ExpectedRightParen,
     Ice(&'static str),
     UnclosedParenthesis,
     UnexpectedToken(Token),
+    ExpectedToken(Vec<TokenKind>, Option<Token>),
     //~ UnexpectedEof,
 }
 
@@ -47,10 +51,28 @@ impl core::fmt::Display for ParseErrorKind {
             //~ Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
             ExpectedIdentifier => write!(f, "Expected Identifier"),
             ExpectedSemicolon => write!(f, "Expected Semicolon"),
+            ExpectedLeftBrace => write!(f, "Expected Starting Brace"),
             ExpectedRightBrace => write!(f, "Expected Ending Brace"),
+            ExpectedLeftParen => write!(f, "Expected Starting Parenthesis"),
+            ExpectedRightParen => write!(f, "Expected Ending Parenthesis"),
             Ice(s) => write!(f, "Internal Compiler Error: {}", s),
             UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
-            UnexpectedToken(t) => write!(f, "Unexpected Token {:?}", t),
+            UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
+            ExpectedToken(expected, found) => {
+                if expected.len() == 1 {
+                    write!(f, "Expected `{}`, ", expected[0])?;
+                } else {
+                    write!(f, "Expected one of ")?;
+                    for e in expected {
+                        write!(f, "`{}`, ", e)?;
+                    }
+                }
+
+                match found {
+                    None => write!(f, "found end of stream"),
+                    Some(token) => write!(f, "found `{}`", token),
+                }
+            }
         }
     }
 }
@@ -102,8 +124,8 @@ impl Parser {
     }
 
     fn advance(&mut self) -> Option<&Token> {
-        self.cursor += 1;
         let c = self.cursor;
+        self.cursor += 1;
         self.get_token(c)
     }
 
@@ -140,11 +162,36 @@ impl Parser {
         } else {
             Err(err)
         }
-        //~ match self.check_advance(kinds) {
-        //~ Some(v) => Ok(Some(v)),
-        //~ None => Err(err),
-        //~ }
-        //~ self.check_advance(kinds).ok_or(err)
+    }
+
+    fn consume_expected(&mut self, kinds: &[TokenKind]) -> Result<Option<&Token>, ParseErrorKind> {
+        if self.advance().is_some() {
+            if self.check(kinds) {
+                Ok(self.peek())
+            } else {
+                Err(ParseErrorKind::ExpectedToken(
+                    kinds.to_owned(),
+                    self.peek().cloned(),
+                ))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn error(&self, kind: ParseErrorKind) -> ParseError {
+        let location = match self.peek() {
+            Some(t) => t.location.clone(),
+            None => match self.peek_previous() {
+                Some(t) => t.location.clone(),
+                None => SourceLocation::bullshit(),
+            }
+        };
+
+        ParseError {
+            kind,
+            location,
+        }
     }
 
     // TODO: implement panic button and synchronize
@@ -288,18 +335,25 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorKind> {
-        if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Print)])
-            .is_some()
-        {
-            return self.print_statement();
-        }
-
-        if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::If)])
-            .is_some()
-        {
-            return self.rust_style_if_statement();
+        if let Some(token) = self.check_advance(&[
+            TokenKind::Reserved(ReservedWord::For),
+            TokenKind::Reserved(ReservedWord::If),
+            TokenKind::Reserved(ReservedWord::Print),
+            TokenKind::Reserved(ReservedWord::While),
+        ]) {
+            return match &token.kind {
+                TokenKind::Reserved(word) => {
+                    use ReservedWord::*;
+                    match word {
+                        For => self.for_statement(),
+                        If => self.if_statement(),
+                        Print => self.print_statement(),
+                        While => self.while_statement(),
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            };
         }
 
         if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
@@ -309,14 +363,83 @@ impl Parser {
         self.expression_statement()
     }
 
+    fn for_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
+
+        let initializer = if self
+            .check_advance(&[TokenKind::Op(Operator::Semicolon)])
+            .is_some()
+        {
+            None
+        } else if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
+            .is_some()
+        {
+            Some(self.variable_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        // TODO: if i had a "get location" function, i'd use it here to get the location for the
+        // default true condition
+
+        let condition = if self.check(&[TokenKind::Op(Operator::Semicolon)]) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(
+            &[TokenKind::Op(Operator::Semicolon)],
+            ParseErrorKind::ExpectedSemicolon,
+        )?;
+
+        let increment = if self.check(&[TokenKind::RightParen]) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
+
+        let body = self.statement()?;
+
+        let mut body = vec![body];
+
+        if let Some(inc) = increment {
+            body.push(Stmt::new(StmtKind::Expr(inc)));
+        }
+
+        let body = Stmt::new(StmtKind::Block(body));
+
+        let condition = match condition {
+            Some(c) => c,
+            None => Expr {
+                location: SourceLocation::bullshit(),
+                kind: ExprKind::Literal(Object::Boolean(true)),
+            },
+        };
+
+        let body = Stmt::new(StmtKind::While(condition, Box::new(body)));
+
+        Ok(match initializer {
+            Some(init) => Stmt::new(StmtKind::Block(vec![init, body])),
+            None => body,
+        })
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        self._rust_style_if_statement()
+    }
+
     fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
-        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedSemicolon)?;
+        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
 
         let condition = self.expression()?;
 
-        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedSemicolon)?;
+        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
 
-        let then_branch = self.statement()?;
+        let then_branch = Box::new(self.statement()?);
 
         let else_branch = if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
@@ -327,21 +450,22 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::new(StmtKind::If(
-            condition,
-            Box::new(then_branch),
-            else_branch,
-        )))
+        Ok(Stmt::new(StmtKind::If(condition, then_branch, else_branch)))
     }
 
-    fn rust_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+    fn _rust_style_if_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
         let condition = self.expression()?;
 
+        //~ /*
         let then_block = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
-            Stmt::new(StmtKind::Block(self.block()?))
+            Box::new(Stmt::new(StmtKind::Block(self.block()?)))
         } else {
-            panic!()
+            return Err(ParseErrorKind::ExpectedLeftBrace);
         };
+        //~ */
+        //~ self.consume_expected(&[TokenKind::LeftBrace])?;
+
+        //~ let then_block = Box::new(Stmt::new(StmtKind::Block(self.block()?)));
 
         let else_block = if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
@@ -349,6 +473,11 @@ impl Parser {
         {
             if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
                 Some(Box::new(Stmt::new(StmtKind::Block(self.block()?))))
+            } else if self
+                .check_advance(&[TokenKind::Reserved(ReservedWord::If)])
+                .is_some()
+            {
+                Some(Box::new(self._rust_style_if_statement()?))
             } else {
                 panic!()
             }
@@ -356,11 +485,7 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::new(StmtKind::If(
-            condition,
-            Box::new(then_block),
-            else_block,
-        )))
+        Ok(Stmt::new(StmtKind::If(condition, then_block, else_block)))
     }
 
     fn print_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
@@ -370,6 +495,34 @@ impl Parser {
             ParseErrorKind::ExpectedSemicolon,
         )?;
         Ok(Stmt::new(StmtKind::Print(expr)))
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        self._rust_style_while_statement()
+    }
+
+    fn _c_style_while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
+
+        let condition = self.expression()?;
+
+        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
+
+        let body = Box::new(self.statement()?);
+
+        Ok(Stmt::new(StmtKind::While(condition, body)))
+    }
+
+    fn _rust_style_while_statement(&mut self) -> Result<Stmt, ParseErrorKind> {
+        let condition = self.expression()?;
+
+        let body = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+            Box::new(Stmt::new(StmtKind::Block(self.block()?)))
+        } else {
+            return Err(ParseErrorKind::ExpectedLeftBrace);
+        };
+
+        Ok(Stmt::new(StmtKind::While(condition, body)))
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, ParseErrorKind> {
@@ -400,7 +553,6 @@ impl Parser {
     fn assignment(&mut self) -> Result<Expr, ParseErrorKind> {
         let expr = self.logical_or()?;
 
-        // TODO: refactor to use check_advance
         if self
             .check_advance(&[TokenKind::Op(Operator::Equal)])
             .is_some()
@@ -516,10 +668,53 @@ impl Parser {
             });
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr, ParseErrorKind> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.check_advance(&[TokenKind::LeftParen]).is_some() {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseErrorKind> {
+        let mut arguments = vec![];
+
+        if !self.check(&[TokenKind::RightParen]) {
+            loop {
+                arguments.push(self.expression()?);
+                if !self
+                    .check_advance(&[TokenKind::Op(Operator::Comma)])
+                    .is_some()
+                {
+                    break;
+                }
+            }
+        }
+
+        let t = self
+            .consume(
+                &[TokenKind::RightParen],
+                ParseErrorKind::UnclosedParenthesis,
+            )?
+            .unwrap();
+
+        Ok(Expr {
+            location: t.location.clone(),
+            kind: ExprKind::Call(Box::new(callee), arguments),
+        })
     }
 
     fn primary(&mut self) -> Result<Expr, ParseErrorKind> {
+        // TODO: refactor to remove unwrap
         if self.peek().is_none() {
             return Err(ParseErrorKind::Ice("Unexpected end of Token stream"));
         }

@@ -25,8 +25,8 @@ impl Environment {
         }
     }
 
-    fn declare(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-        self.bindings.insert(sym, obj)
+    fn declare(&mut self, sym: &Sym, obj: Object) -> Option<Object> {
+        self.bindings.insert(sym.clone(), obj)
     }
 
     fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
@@ -88,56 +88,69 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Option<Object>, RuntimeError> {
+    pub fn interpret_statement(
+        &mut self,
+        statement: &Stmt,
+    ) -> Result<Option<Object>, RuntimeError> {
+        use StmtKind::*;
+        Ok(match &statement.kind {
+            Expr(expr) => Some(self.evaluate(&expr)?),
+            Print(expr) => {
+                println!("{}", self.evaluate(&expr)?);
+                None
+            }
+            VariableDeclaration(sym, maybe_init) => {
+                let obj = match maybe_init {
+                    Some(init) => self.evaluate(&init)?,
+                    None => Object::Nil,
+                };
+                self.environment.declare(sym, obj);
+                None
+            }
+            Block(stmts) => {
+                let environment = std::mem::take(&mut self.environment);
+                let (environment, err) = self.execute_block(stmts, environment.new_inner());
+                self.environment = environment;
+                if let Some(e) = err {
+                    return Err(e);
+                }
+                None
+            }
+            If(cond, then_block, else_block) => {
+                if self.evaluate(&cond)?.is_truthy() {
+                    self.interpret_statement(then_block)?;
+                } else if let Some(e) = else_block {
+                    self.interpret_statement(e)?;
+                }
+                None
+            }
+            While(cond, body) => {
+                while self.evaluate(&cond)?.is_truthy() {
+                    self.interpret_statement(body)?;
+                }
+                None
+            }
+        })
+    }
+
+    pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Option<Object>, RuntimeError> {
         let mut obj = None;
         for statement in statements {
             //~ eprintln!("{}", statement);
-            use StmtKind::*;
-            obj = match statement.kind {
-                Expr(expr) => Some(self.evaluate(&expr)?),
-                Print(expr) => {
-                    println!("{}", self.evaluate(&expr)?);
-                    None
-                }
-                VariableDeclaration(sym, maybe_init) => {
-                    let obj = match maybe_init {
-                        Some(init) => self.evaluate(&init)?,
-                        None => Object::Nil,
-                    };
-                    self.environment.declare(sym, obj);
-                    None
-                }
-                Block(stmts) => {
-                    let environment = std::mem::take(&mut self.environment);
-                    let (environment, err) = self.execute_block(stmts, environment.new_inner());
-                    self.environment = environment;
-                    if let Some(e) = err {
-                        return Err(e);
-                    }
-                    None
-                }
-                If(cond, then_block, else_block) => {
-                    if self.evaluate(&cond)?.is_truthy() {
-                        self.interpret(vec![*then_block])?;
-                    } else if let Some(e) = else_block {
-                        self.interpret(vec![*e])?;
-                    }
-                    None
-                }
-            };
+            obj = self.interpret_statement(statement)?;
         }
         Ok(obj)
     }
 
     fn execute_block(
         &mut self,
-        stmts: Vec<Stmt>,
+        stmts: &[Stmt],
         environment: Environment,
         //~ ) -> Result<(), RuntimeError> {
     ) -> (Environment, Option<RuntimeError>) {
         self.environment = environment;
 
-        let result = self.interpret(stmts);
+        let result = self.interpret_slice(stmts);
 
         let environment = std::mem::take(&mut self.environment);
 
@@ -365,7 +378,7 @@ impl Interpreter {
                 }
 
                 self.evaluate(right)?
-            },
+            }
             LogicalAnd(left, right) => {
                 let value = self.evaluate(left)?;
 
@@ -374,7 +387,8 @@ impl Interpreter {
                 }
 
                 self.evaluate(right)?
-            },
+            }
+            Call(_callee, _args) => todo!(),
         })
     }
 }

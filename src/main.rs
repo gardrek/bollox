@@ -164,9 +164,17 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
     let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
 
+    /*
+    for s in &statements {
+        //~ eprint!("{} ", s);
+        eprintln!("{}", s);
+    }
+    eprintln!();
+    */
+
     let mut interpreter = Interpreter::new();
 
-    if let Some(obj) = interpreter.interpret(statements)? {
+    if let Some(obj) = interpreter.interpret_slice(&statements[..])? {
         let s = format!("{}", obj);
 
         Ok(Some(s))

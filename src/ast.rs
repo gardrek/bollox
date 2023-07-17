@@ -24,6 +24,7 @@ pub enum StmtKind {
 
     Block(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
 }
 
 pub struct Expr {
@@ -40,6 +41,7 @@ pub enum ExprKind {
     Assign(Sym, Box<Expr>),
     LogicalOr(Box<Expr>, Box<Expr>),
     LogicalAnd(Box<Expr>, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 impl fmt::Display for Stmt {
@@ -69,17 +71,18 @@ impl fmt::Display for StmtKind {
                 Some(e) => write!(f, "(var-stmt {:?} = {})", sym, e),
                 None => write!(f, "(var-stmt {:?})", sym),
             },
-            StmtKind::Block(exprs) => {
-                write!(f, "(block-stmt")?;
-                for e in exprs {
-                    write!(f, " {}", e)?;
-                }
-                write!(f, ")")
-            }
             StmtKind::If(cond, then_block, else_block) => match else_block {
                 Some(e) => write!(f, "(if-stmt {} {} {})", cond, then_block, e),
                 None => write!(f, "(if-stmt {} {})", cond, then_block),
             },
+            StmtKind::While(cond, body) => write!(f, "(while-stmt {}, {})", cond, body),
+            StmtKind::Block(stmts) => {
+                write!(f, "(block-stmt")?;
+                for st in stmts {
+                    write!(f, " {}", st)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -96,6 +99,13 @@ impl fmt::Display for ExprKind {
             Assign(sym, expr) => write!(f, "(assign {:?} {})", sym, expr),
             LogicalOr(a, b) => write!(f, "(or {} {})", a, b),
             LogicalAnd(a, b) => write!(f, "(and {} {})", a, b),
+            Call(callee, args) => {
+                write!(f, "(call {}", callee)?;
+                for e in args {
+                    write!(f, " {}", e)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
