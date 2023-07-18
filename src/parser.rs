@@ -156,6 +156,22 @@ impl Parser {
         )
     }
 
+    fn consume_identifier(&mut self) -> Result<string_interner::Sym, ParseError> {
+        match self.peek() {
+            Some(t) => match &t.kind {
+                TokenKind::Identifier(sym) => {
+                    let sym = *sym;
+                    self.advance();
+                    return Ok(sym);
+                }
+                _ => (),
+            },
+            None => (),
+        }
+
+        Err(self.error(ParseErrorKind::ExpectedIdentifier))
+    }
+
     fn error(&self, kind: ParseErrorKind) -> ParseError {
         let location = match self.peek() {
             Some(t) => t.location.clone(),
@@ -271,13 +287,57 @@ impl Parser {
 impl Parser {
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
         if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Fun)])
+            .is_some()
+        {
+            return self.function_declaration();
+        }
+
+        if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
             .is_some()
         {
-            self.variable_declaration()
-        } else {
-            self.statement()
+            return self.variable_declaration();
         }
+
+        self.statement()
+    }
+
+    fn function_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume_identifier()?;
+
+        self.consume_expected(&[TokenKind::LeftParen])?;
+
+        let mut parameters = vec![];
+
+        if !self.check(&[TokenKind::RightParen]) {
+            loop {
+                parameters.push(self.consume_identifier()?);
+
+                if !self
+                    .check_advance(&[TokenKind::Op(Operator::Comma)])
+                    .is_some()
+                {
+                    break;
+                }
+            }
+        }
+
+        if parameters.len() > MAX_ARGUMENTS {
+            self.report(self.error(ParseErrorKind::MaxArgumentsExceeded));
+        }
+
+        self.consume_expected(&[TokenKind::RightParen])?;
+
+        self.consume_expected(&[TokenKind::LeftBrace])?;
+
+        let body = self.block()?;
+
+        Ok(Stmt::new(StmtKind::FunctionDeclaration(crate::object::LoxFunction {
+            name,
+            parameters,
+            body,
+        })))
     }
 
     fn variable_declaration(&mut self) -> Result<Stmt, ParseError> {
@@ -653,6 +713,7 @@ impl Parser {
         if !self.check(&[TokenKind::RightParen]) {
             loop {
                 arguments.push(self.expression()?);
+
                 if !self
                     .check_advance(&[TokenKind::Op(Operator::Comma)])
                     .is_some()

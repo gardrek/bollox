@@ -190,6 +190,8 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
 
     let mut interpreter = Interpreter::new();
 
+    interpreter.init_global_environment();
+
     if let Some(obj) = interpreter.interpret_slice(&statements[..])? {
         let s = format!("{}", obj);
 

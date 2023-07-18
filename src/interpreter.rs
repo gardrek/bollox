@@ -1,32 +1,35 @@
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
 use crate::object::Object;
+use crate::object::Callable;
+use crate::object::NativeFunction;
 use crate::source::SourceLocation;
 use crate::token::Operator;
+use crate::INTERNER;
 
 use std::collections::HashMap;
 use string_interner::Sym;
 
 #[derive(Default, Clone)]
 pub struct Environment {
-    enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Box<Environment>>,
     bindings: HashMap<Sym, Object>,
 }
 
 #[derive(Default)]
 pub struct Interpreter {
-    environment: Environment,
+    pub environment: Environment,
     globals: Environment,
 }
 
 impl Environment {
-    fn new_inner(self) -> Environment {
+    pub fn new_inner(self) -> Environment {
         Environment {
             enclosing: Some(Box::new(self)),
             bindings: HashMap::default(),
         }
     }
 
-    fn declare(&mut self, sym: &Sym, obj: Object) -> Option<Object> {
+    pub fn define(&mut self, sym: &Sym, obj: Object) -> Option<Object> {
         self.bindings.insert(sym.clone(), obj)
     }
 
@@ -87,25 +90,66 @@ impl Interpreter {
         Interpreter::default()
     }
 
+    fn get_binding(&self, sym: &Sym) -> Option<&Object> {
+        let obj = self.globals.bindings.get(sym);
+
+        if obj.is_some() {
+            obj
+        } else {
+            let obj = self.environment.bindings.get(sym);
+
+            if obj.is_some() {
+                obj
+            } else if let Some(enc) = &self.environment.enclosing {
+                enc.get_by_sym(sym)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn init_global_environment(&mut self) {
+        fn clock_fn(_interpreter: &mut Interpreter, _args: Vec<Object>) -> Result<Option<Object>, RuntimeError> {
+            use std::time::{SystemTime, UNIX_EPOCH};
+
+            Ok(Some(Object::Number(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as f64
+                    / 1000.0,
+            )))
+        }
+
+        self.define_global_item("clock", 0, clock_fn);
+    }
+
+    fn define_global_item(
+        &mut self,
+        name: &'static str,
+        arity: usize,
+        func: fn(&mut Interpreter, Vec<Object>) -> Result<Option<Object>, RuntimeError>,
+    ) {
+        let mut interner = INTERNER.write().unwrap();
+
+        let sym = interner.get_or_intern(name);
+
+        self.globals.define(
+            &sym,
+            Object::Callable(Callable::Native(NativeFunction {
+                name: "clock",
+                arity,
+                func,
+            })),
+        );
+    }
+
     pub fn interpret_statement(
         &mut self,
         statement: &Stmt,
     ) -> Result<Option<Object>, RuntimeError> {
         use StmtKind::*;
         Ok(match &statement.kind {
-            Expr(expr) => Some(self.evaluate(&expr)?),
-            Print(expr) => {
-                println!("{}", self.evaluate(&expr)?);
-                None
-            }
-            VariableDeclaration(sym, maybe_init) => {
-                let obj = match maybe_init {
-                    Some(init) => self.evaluate(&init)?,
-                    None => Object::Nil,
-                };
-                self.environment.declare(sym, obj);
-                None
-            }
             Block(stmts) => {
                 let environment = std::mem::take(&mut self.environment);
                 let (environment, err) = self.execute_block(stmts, environment.new_inner());
@@ -115,12 +159,30 @@ impl Interpreter {
                 }
                 None
             }
+            Expr(expr) => Some(self.evaluate(&expr)?),
+            FunctionDeclaration(func) => {
+                let name = func.name.clone();
+                self.environment.define(&name, Object::Callable(Callable::Lox(func.clone())));
+                None
+            },
             If(cond, then_block, else_block) => {
                 if self.evaluate(&cond)?.is_truthy() {
                     self.interpret_statement(then_block)?;
                 } else if let Some(e) = else_block {
                     self.interpret_statement(e)?;
                 }
+                None
+            }
+            Print(expr) => {
+                println!("{}", self.evaluate(&expr)?);
+                None
+            }
+            VariableDeclaration(sym, maybe_init) => {
+                let obj = match maybe_init {
+                    Some(init) => self.evaluate(&init)?,
+                    None => Object::Nil,
+                };
+                self.environment.define(sym, obj);
                 None
             }
             While(cond, body) => {
@@ -354,8 +416,7 @@ impl Interpreter {
             }
             Grouping(inside) => self.evaluate(inside)?,
             VariableAccess(sym) => self
-                .environment
-                .get_by_sym(sym)
+                .get_binding(sym)
                 .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
                 .clone(),
             Assign(sym, expr) => {
@@ -415,7 +476,10 @@ impl Interpreter {
                     ));
                 }
 
-                callee.call(self, evaluated_args)
+                match callee.call(self, evaluated_args)? {
+                    Some(obj) => obj,
+                    None => Object::Nil,
+                }
             }
         })
     }

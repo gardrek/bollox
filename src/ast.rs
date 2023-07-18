@@ -1,9 +1,11 @@
 use crate::object::Object;
+use crate::object::LoxFunction;
 use crate::source::SourceLocation;
 use crate::token::Operator;
 use std::fmt;
 use string_interner::Sym;
 
+#[derive(Debug, Clone)]
 pub struct Stmt {
     pub kind: StmtKind,
 }
@@ -14,24 +16,27 @@ impl Stmt {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum StmtKind {
+    Block(Vec<Stmt>),
     Expr(Expr),
+    FunctionDeclaration(LoxFunction),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
 
     // the Sym is the variable name, the Expr is the initializer
-    // TODO: Maybe split this into its own enum when there's more declarations?
     VariableDeclaration(Sym, Option<Expr>),
 
-    Block(Vec<Stmt>),
-    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
 }
 
+#[derive(Clone)]
 pub struct Expr {
     pub location: SourceLocation,
     pub kind: ExprKind,
 }
 
+#[derive(Clone)]
 pub enum ExprKind {
     Literal(Object),
     Unary(Operator, Box<Expr>),
@@ -65,17 +70,6 @@ impl fmt::Debug for Expr {
 impl fmt::Display for StmtKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
-            StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
-            StmtKind::VariableDeclaration(sym, expr) => match expr {
-                Some(e) => write!(f, "(var-stmt {:?} = {})", sym, e),
-                None => write!(f, "(var-stmt {:?})", sym),
-            },
-            StmtKind::If(cond, then_block, else_block) => match else_block {
-                Some(e) => write!(f, "(if-stmt {} {} {})", cond, then_block, e),
-                None => write!(f, "(if-stmt {} {})", cond, then_block),
-            },
-            StmtKind::While(cond, body) => write!(f, "(while-stmt {}, {})", cond, body),
             StmtKind::Block(stmts) => {
                 write!(f, "(block-stmt")?;
                 for st in stmts {
@@ -83,6 +77,28 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
+            StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
+            StmtKind::FunctionDeclaration(LoxFunction{name, parameters, body}) => {
+                write!(f, "(fun-stmt {:?} (", name)?;
+                for p in parameters {
+                    write!(f, " {:?}", p)?;
+                }
+                write!(f, ") ")?;
+                for st in body {
+                    write!(f, " {}", st)?;
+                }
+                write!(f, ")")
+            }
+            StmtKind::If(cond, then_block, else_block) => match else_block {
+                Some(e) => write!(f, "(if-stmt {} {} {})", cond, then_block, e),
+                None => write!(f, "(if-stmt {} {})", cond, then_block),
+            },
+            StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
+            StmtKind::VariableDeclaration(sym, expr) => match expr {
+                Some(e) => write!(f, "(var-stmt {:?} {})", sym, e),
+                None => write!(f, "(var-stmt {:?})", sym),
+            },
+            StmtKind::While(cond, body) => write!(f, "(while-stmt {}, {})", cond, body),
         }
     }
 }

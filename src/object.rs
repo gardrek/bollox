@@ -1,8 +1,9 @@
 use std::fmt;
 
+use crate::interpreter::Interpreter;
+use crate::interpreter::RuntimeError;
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
-use crate::interpreter::Interpreter;
 use string_interner::Sym;
 
 #[derive(Clone)]
@@ -23,19 +24,61 @@ pub enum StringKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Callable {
-    //~ Native(Box<Fn(&mut Interpreter, Vec<Object>) -> Object>)
+    Native(NativeFunction),
+    Lox(LoxFunction),
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxFunction {
+    pub name: Sym,
+    pub parameters: Vec<Sym>,
+    pub body: Vec<crate::ast::Stmt>,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct NativeFunction {
+    pub name: &'static str,
+    pub arity: usize,
+    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Option<Object>, RuntimeError>,
 }
 
 impl Callable {
     pub fn arity(&self) -> usize {
+        use Callable::*;
         match self {
-            _ => todo!(),
+            Native(f) => f.arity,
+            Lox(f) => f.parameters.len(),
         }
     }
 
-    pub fn call(&mut self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Object {
+    pub fn call(&mut self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Option<Object>, RuntimeError> {
+        use Callable::*;
         match self {
-            _ => todo!(),
+            Native(f) => (f.func)(interpreter, arguments),
+            Lox(f) => {
+                let environment = std::mem::take(&mut interpreter.environment);
+
+                let mut environment = environment.new_inner();
+
+                let mut i = 0;
+                for arg in arguments.into_iter() {
+                    environment.define(
+                        &f.parameters[i],
+                        arg,
+                    );
+                    i += 1;
+                }
+
+                interpreter.environment = environment;
+
+                let obj = interpreter.interpret_slice(&f.body[..]);
+
+                let environment = std::mem::take(&mut interpreter.environment);
+
+                interpreter.environment = *environment.enclosing.unwrap();
+
+                obj
+            },
         }
     }
 }
@@ -92,14 +135,6 @@ impl Object {
         }
     }
 
-    pub fn is_callable(&self) -> bool {
-        use Object::*;
-        match self {
-            Nil | Boolean(_) | Number(_) | String(_) => false,
-            Callable(_) => true,
-        }
-    }
-
     /*
     pub fn as_number(&self) -> Option<f64> {
         use Object::*;
@@ -117,6 +152,22 @@ impl Object {
         }
     }
     */
+}
+
+/*
+impl PartialEq for Callable {
+    fn eq(&self, other: &Self) -> bool {
+        // I believe this is allowed in the PartialEq specs
+        // But we cannot implement Eq
+        false
+    }
+}
+*/
+
+impl PartialEq for LoxFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 impl PartialEq for Object {
@@ -177,6 +228,12 @@ impl fmt::Display for Object {
             String(kind) => write!(f, "{}", kind),
             Callable(c) => write!(f, "{:?}", c),
         }
+    }
+}
+
+impl fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "NativeFunction#{}", self.name)
     }
 }
 
