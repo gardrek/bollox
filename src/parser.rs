@@ -3,31 +3,17 @@ use crate::object::Object;
 use crate::source::SourceLocation;
 use crate::token::{Operator, ReservedWord, Token, TokenKind};
 
+const MAX_ARGUMENTS: usize = 255;
+
 #[derive(Debug, Clone)]
 pub enum ParseErrorKind {
-    //~ Unimplemented(&'static str),
     ExpectedIdentifier,
-    ExpectedSemicolon,
     ExpectedLeftBrace,
-    ExpectedRightBrace,
-    ExpectedLeftParen,
-    ExpectedRightParen,
-    Ice(&'static str),
-    UnclosedParenthesis,
-    UnexpectedToken(Token),
     ExpectedToken(Vec<TokenKind>, Option<Token>),
-    //~ UnexpectedEof,
+    Ice(&'static str),
+    MaxArgumentsExceeded,
+    UnexpectedToken(Token),
 }
-
-impl std::error::Error for ParseErrorKind {}
-
-/*
-impl From<ParseErrorKind> for crate::result::Error {
-    fn from(other: ParseErrorKind) -> crate::result::Error {
-        crate::result::Error::Parser(other)
-    }
-}
-*/
 
 impl From<ParseError> for crate::result::Error {
     fn from(other: ParseError) -> crate::result::Error {
@@ -35,29 +21,13 @@ impl From<ParseError> for crate::result::Error {
     }
 }
 
-/*
-impl From<ParseError> for ParseErrorKind {
-    fn from(other: ParseError) -> ParseErrorKind {
-        other.kind.clone()
-    }
-}
-*/
-
 impl core::fmt::Display for ParseErrorKind {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use ParseErrorKind::*;
 
         match self {
-            //~ Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
             ExpectedIdentifier => write!(f, "Expected Identifier"),
-            ExpectedSemicolon => write!(f, "Expected Semicolon"),
             ExpectedLeftBrace => write!(f, "Expected Starting Brace"),
-            ExpectedRightBrace => write!(f, "Expected Ending Brace"),
-            ExpectedLeftParen => write!(f, "Expected Starting Parenthesis"),
-            ExpectedRightParen => write!(f, "Expected Ending Parenthesis"),
-            Ice(s) => write!(f, "Internal Compiler Error: {}", s),
-            UnclosedParenthesis => write!(f, "Unclosed Parenthesis"),
-            UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
             ExpectedToken(expected, found) => {
                 if expected.len() == 1 {
                     write!(f, "Expected `{}`, ", expected[0])?;
@@ -73,6 +43,13 @@ impl core::fmt::Display for ParseErrorKind {
                     Some(token) => write!(f, "found `{}`", token),
                 }
             }
+            Ice(s) => write!(f, "Internal Compiler Error: {}", s),
+            MaxArgumentsExceeded => write!(
+                f,
+                "Max of {} function call arguments exceeded",
+                MAX_ARGUMENTS
+            ),
+            UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
         }
     }
 }
@@ -94,7 +71,7 @@ impl core::fmt::Display for ParseError {
 pub struct Parser {
     tokens: Vec<Token>,
     cursor: usize,
-    //~ errors: Vec<ParseErrorKind>,
+    pub errors: Vec<ParseError>,
 }
 
 impl Parser {
@@ -102,7 +79,7 @@ impl Parser {
         Self {
             tokens,
             cursor: 0,
-            //~ errors: vec![],
+            errors: vec![],
         }
     }
 
@@ -165,18 +142,18 @@ impl Parser {
     }
 
     fn consume_expected(&mut self, kinds: &[TokenKind]) -> Result<Option<&Token>, ParseError> {
-        if self.advance().is_some() {
-            if self.check(kinds) {
-                Ok(self.peek())
-            } else {
-                Err(self.error(ParseErrorKind::ExpectedToken(
-                    kinds.to_owned(),
-                    self.peek().cloned(),
-                )))
-            }
+        /*if self.check(kinds) {
+            Ok(self.advance())
         } else {
-            Ok(None)
-        }
+            Err(self.error(ParseErrorKind::ExpectedToken(
+                kinds.to_owned(),
+                self.peek().cloned(),
+            )))
+        }*/
+        self.consume(
+            kinds,
+            ParseErrorKind::ExpectedToken(kinds.to_owned(), self.peek().cloned()),
+        )
     }
 
     fn error(&self, kind: ParseErrorKind) -> ParseError {
@@ -185,17 +162,18 @@ impl Parser {
             None => match self.peek_previous() {
                 Some(t) => t.location.clone(),
                 None => SourceLocation::bullshit(),
-            }
+            },
         };
 
-        ParseError {
-            kind,
-            location,
-        }
+        ParseError { kind, location }
+    }
+
+    fn report(&mut self, error: ParseError) {
+        self.errors.push(error)
     }
 
     // TODO: implement panic button and synchronize
-    fn _synchronize(&mut self) {
+    fn synchronize(&mut self) {
         self.advance();
 
         while let Some(token) = self.peek() {
@@ -239,11 +217,6 @@ impl Parser {
 
         Ok(expr)
     }
-}
-
-/// ### Recursive Descent
-/// Most of the following functions each represent one rule of the language's grammar
-impl Parser {
     pub fn parse_all(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut statements = vec![];
         while !self.is_at_end() {
@@ -263,46 +236,47 @@ impl Parser {
         match self.declaration() {
             Ok(stmt) => Some(Ok(stmt)),
             Err(err) => {
-                //~ self.errors.push(e);
-                //~ self.synchronize();
-                //~ unimplemented!()
-                //~ return None
+                self.report(err);
+                self.synchronize();
+
+                /*
                 let t = match self.peek() {
                     Some(t) => t,
                     None => {
                         let location = SourceLocation::bullshit();
-                        return Some(Err(ParseError { location, kind: err.kind }));
+                        return Some(Err(ParseError {
+                            location,
+                            kind: err.kind,
+                        }));
                     }
                 };
 
                 let location = t.location.clone();
 
-                let e = ParseError { location, kind: err.kind };
+                let e = ParseError {
+                    location,
+                    kind: err.kind,
+                };
 
                 Some(Err(e))
+                */
+                None
             }
         }
     }
+}
 
+/// ### Recursive Descent
+/// Most of the following functions each represent one rule of the language's grammar
+impl Parser {
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
-        let maybe = if self
+        if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
             .is_some()
         {
             self.variable_declaration()
         } else {
             self.statement()
-        };
-        match maybe {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                // TODO: FIXME: commenting this out has fixed our problem i suppose.
-                // so this funciton is where the problem is, maybe?
-                //~ self.synchronize();
-                //Some(Err(ParseErrorKind::Unimplemented("Declaration synchronize hit")))
-                eprintln!("Synchro branch");
-                Err(e)
-            }
         }
     }
 
@@ -326,10 +300,7 @@ impl Parser {
             None
         };
 
-        self.consume(
-            &[TokenKind::Op(Operator::Semicolon)],
-            ParseErrorKind::ExpectedSemicolon,
-        )?;
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
         Ok(Stmt::new(StmtKind::VariableDeclaration(sym, initializer)))
     }
@@ -364,7 +335,7 @@ impl Parser {
     }
 
     fn for_statement(&mut self) -> Result<Stmt, ParseError> {
-        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
+        self.consume_expected(&[TokenKind::LeftParen])?;
 
         let initializer = if self
             .check_advance(&[TokenKind::Op(Operator::Semicolon)])
@@ -389,10 +360,7 @@ impl Parser {
             Some(self.expression()?)
         };
 
-        self.consume(
-            &[TokenKind::Op(Operator::Semicolon)],
-            ParseErrorKind::ExpectedSemicolon,
-        )?;
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
         let increment = if self.check(&[TokenKind::RightParen]) {
             None
@@ -400,7 +368,7 @@ impl Parser {
             Some(self.expression()?)
         };
 
-        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
+        self.consume_expected(&[TokenKind::RightParen])?;
 
         let body = self.statement()?;
 
@@ -433,11 +401,11 @@ impl Parser {
     }
 
     fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
-        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
+        self.consume_expected(&[TokenKind::LeftParen])?;
 
         let condition = self.expression()?;
 
-        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
+        self.consume_expected(&[TokenKind::RightParen])?;
 
         let then_branch = Box::new(self.statement()?);
 
@@ -490,10 +458,7 @@ impl Parser {
 
     fn print_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
-        self.consume(
-            &[TokenKind::Op(Operator::Semicolon)],
-            ParseErrorKind::ExpectedSemicolon,
-        )?;
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
         Ok(Stmt::new(StmtKind::Print(expr)))
     }
 
@@ -502,11 +467,11 @@ impl Parser {
     }
 
     fn _c_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
-        self.consume(&[TokenKind::LeftParen], ParseErrorKind::ExpectedLeftParen)?;
+        self.consume_expected(&[TokenKind::LeftParen])?;
 
         let condition = self.expression()?;
 
-        self.consume(&[TokenKind::RightParen], ParseErrorKind::ExpectedRightParen)?;
+        self.consume_expected(&[TokenKind::RightParen])?;
 
         let body = Box::new(self.statement()?);
 
@@ -532,17 +497,14 @@ impl Parser {
             stmts.push(self.declaration()?);
         }
 
-        self.consume(&[TokenKind::RightBrace], ParseErrorKind::ExpectedRightBrace)?;
+        self.consume_expected(&[TokenKind::RightBrace])?;
 
         Ok(stmts)
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
-        self.consume(
-            &[TokenKind::Op(Operator::Semicolon)],
-            ParseErrorKind::ExpectedSemicolon,
-        )?;
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
         Ok(Stmt::new(StmtKind::Expr(expr)))
     }
 
@@ -700,12 +662,11 @@ impl Parser {
             }
         }
 
-        let t = self
-            .consume(
-                &[TokenKind::RightParen],
-                ParseErrorKind::UnclosedParenthesis,
-            )?
-            .unwrap();
+        if arguments.len() > MAX_ARGUMENTS {
+            self.report(self.error(ParseErrorKind::MaxArgumentsExceeded));
+        }
+
+        let t = self.consume_expected(&[TokenKind::RightParen])?.unwrap();
 
         Ok(Expr {
             location: t.location.clone(),
@@ -741,10 +702,7 @@ impl Parser {
 
                     let expr = self.expression()?;
 
-                    self.consume(
-                        &[TokenKind::RightParen],
-                        ParseErrorKind::UnclosedParenthesis,
-                    )?;
+                    self.consume_expected(&[TokenKind::RightParen])?;
 
                     Ok(Expr {
                         location,

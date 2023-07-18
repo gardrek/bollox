@@ -12,9 +12,10 @@ pub struct Environment {
     bindings: HashMap<Sym, Object>,
 }
 
+#[derive(Default)]
 pub struct Interpreter {
-    // running state here
     environment: Environment,
+    globals: Environment,
 }
 
 impl Environment {
@@ -83,9 +84,7 @@ impl Environment {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {
-            environment: Environment::default(),
-        }
+        Interpreter::default()
     }
 
     pub fn interpret_statement(
@@ -388,7 +387,36 @@ impl Interpreter {
 
                 self.evaluate(right)?
             }
-            Call(_callee, _args) => todo!(),
+            Call(callee, args) => {
+                let location = callee.location.clone();
+
+                let callee = self.evaluate(callee)?;
+
+                let mut evaluated_args = vec![];
+
+                for a in args {
+                    evaluated_args.push(self.evaluate(a)?);
+                }
+
+                let mut callee = match callee {
+                    Callable(c) => c,
+                    _ => {
+                        return Err(RuntimeError::type_error(
+                            "Attempt to call uncallable type",
+                            location,
+                        ));
+                    }
+                };
+
+                if callee.arity() != evaluated_args.len() {
+                    return Err(RuntimeError::type_error(
+                        "Incorrect number of arguments",
+                        location,
+                    ));
+                }
+
+                callee.call(self, evaluated_args)
+            }
         })
     }
 }

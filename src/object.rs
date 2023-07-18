@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
+use crate::interpreter::Interpreter;
 use string_interner::Sym;
 
 #[derive(Clone)]
@@ -10,6 +11,7 @@ pub enum Object {
     Boolean(bool),
     Number(f64),
     String(StringKind),
+    Callable(Callable),
 }
 
 #[derive(Debug, Clone)]
@@ -17,6 +19,25 @@ pub enum StringKind {
     //~ Dynamic(String),
     Static(Sym),
     Cat(Box<StringKind>, Box<StringKind>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Callable {
+    //~ Native(Box<Fn(&mut Interpreter, Vec<Object>) -> Object>)
+}
+
+impl Callable {
+    pub fn arity(&self) -> usize {
+        match self {
+            _ => todo!(),
+        }
+    }
+
+    pub fn call(&mut self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Object {
+        match self {
+            _ => todo!(),
+        }
+    }
 }
 
 impl StringKind {
@@ -69,13 +90,14 @@ impl Object {
             Boolean(b) => *b,
             _ => true,
         }
+    }
 
-        /* Alternative truthiness rules
-            Number(n) => n != 0.0,
-            DynamicString(ref s) => !s.is_empty(),
-            // NOTE: this relies on the behavior that the empty string is assigned to store id 0
-            StaticString(id) => !id.is_zero(),
-        */
+    pub fn is_callable(&self) -> bool {
+        use Object::*;
+        match self {
+            Nil | Boolean(_) | Number(_) | String(_) => false,
+            Callable(_) => true,
+        }
     }
 
     /*
@@ -114,13 +136,15 @@ impl PartialEq for Object {
                     a_kind.to_string() == b_kind.to_string()
                 }
             },
+            (Callable(a), Callable(b)) => a == b,
             (Nil, _) => false,
             (_, Nil) => false,
             (Boolean(_), _) => false,
             (_, Boolean(_)) => false,
             (Number(_), _) => false,
             (_, Number(_)) => false,
-            //~ (_, _) => false,
+            (Callable(_), _) => false,
+            (_, Callable(_)) => false,
         }
     }
 }
@@ -151,6 +175,7 @@ impl fmt::Display for Object {
             Boolean(b) => write!(f, "{}", b),
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
+            Callable(c) => write!(f, "{:?}", c),
         }
     }
 }
@@ -163,6 +188,7 @@ impl fmt::Debug for Object {
             Boolean(b) => write!(f, "{:?}", b),
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
+            Callable(c) => write!(f, "{:?}", c),
         }
     }
 }

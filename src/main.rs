@@ -159,18 +159,34 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         //~ eprintln!();
     }
     eprintln!();
-    */
+    //~ */
 
     let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
 
-    /*
-    for s in &statements {
-        //~ eprint!("{} ", s);
-        eprintln!("{}", s);
+    let had_error = parser.errors.len() != 0;
+
+    if had_error {
+        for e in parser.errors {
+            eprintln!(
+                "error on line {:?}: {}",
+                crate::source::SourceLocation::error_line_number(
+                    &result::Error::Parser(e.clone()),
+                    &source
+                ),
+                e,
+            )
+        }
+
+        //~ /*
+        for s in &statements {
+            //~ eprint!("{} ", s);
+            eprintln!("{}", s);
+        }
+        eprintln!();
+        //~ */
+        return Ok(None);
     }
-    eprintln!();
-    */
 
     let mut interpreter = Interpreter::new();
 
