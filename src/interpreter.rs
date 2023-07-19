@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
@@ -138,7 +138,8 @@ impl Interpreter {
         Ok(match &statement.kind {
             Block(stmts) => {
                 let environment = std::mem::take(&mut self.environment);
-                let (environment, err) = self.execute_block(stmts, Environment::new_inner(environment));
+                let (environment, err) =
+                    self.execute_block(stmts, Environment::new_inner(environment));
                 self.environment = environment;
                 if let Some(e) = err {
                     return Err(e.into());

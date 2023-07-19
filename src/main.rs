@@ -152,7 +152,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         }
     }
 
-    //~ /*
+    /*
     for tk in &tokens {
         eprint!("{} ", tk);
         //~ eprintln!();
