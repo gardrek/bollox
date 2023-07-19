@@ -333,11 +333,13 @@ impl Parser {
 
         let body = self.block()?;
 
-        Ok(Stmt::new(StmtKind::FunctionDeclaration(crate::object::LoxFunction {
-            name,
-            parameters,
-            body,
-        })))
+        Ok(Stmt::new(StmtKind::FunctionDeclaration(
+            crate::object::LoxFunction {
+                name,
+                parameters,
+                body,
+            },
+        )))
     }
 
     fn variable_declaration(&mut self) -> Result<Stmt, ParseError> {
@@ -370,6 +372,7 @@ impl Parser {
             TokenKind::Reserved(ReservedWord::For),
             TokenKind::Reserved(ReservedWord::If),
             TokenKind::Reserved(ReservedWord::Print),
+            TokenKind::Reserved(ReservedWord::Return),
             TokenKind::Reserved(ReservedWord::While),
         ]) {
             return match &token.kind {
@@ -379,6 +382,7 @@ impl Parser {
                         For => self.for_statement(),
                         If => self.if_statement(),
                         Print => self.print_statement(),
+                        Return => self.return_statement(),
                         While => self.while_statement(),
                         _ => unreachable!(),
                     }
@@ -520,6 +524,23 @@ impl Parser {
         let expr = self.expression()?;
         self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
         Ok(Stmt::new(StmtKind::Print(expr)))
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt, ParseError> {
+        let location = self.peek().unwrap().location.clone();
+
+        let expr = if self.check(&[TokenKind::Op(Operator::Semicolon)]) {
+            Expr {
+                location,
+                kind: ExprKind::Literal(Object::Nil),
+            }
+        } else {
+            self.expression()?
+        };
+
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
+
+        Ok(Stmt::new(StmtKind::Return(expr)))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {

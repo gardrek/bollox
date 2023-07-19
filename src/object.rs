@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::interpreter::Interpreter;
-use crate::interpreter::RuntimeError;
+use crate::interpreter::ErrorOrReturn;
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
 use string_interner::Sym;
@@ -39,7 +39,7 @@ pub struct LoxFunction {
 pub struct NativeFunction {
     pub name: &'static str,
     pub arity: usize,
-    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Option<Object>, RuntimeError>,
+    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
 }
 
 impl Callable {
@@ -48,37 +48,6 @@ impl Callable {
         match self {
             Native(f) => f.arity,
             Lox(f) => f.parameters.len(),
-        }
-    }
-
-    pub fn call(&mut self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Option<Object>, RuntimeError> {
-        use Callable::*;
-        match self {
-            Native(f) => (f.func)(interpreter, arguments),
-            Lox(f) => {
-                let environment = std::mem::take(&mut interpreter.environment);
-
-                let mut environment = environment.new_inner();
-
-                let mut i = 0;
-                for arg in arguments.into_iter() {
-                    environment.define(
-                        &f.parameters[i],
-                        arg,
-                    );
-                    i += 1;
-                }
-
-                interpreter.environment = environment;
-
-                let obj = interpreter.interpret_slice(&f.body[..]);
-
-                let environment = std::mem::take(&mut interpreter.environment);
-
-                interpreter.environment = *environment.enclosing.unwrap();
-
-                obj
-            },
         }
     }
 }
@@ -154,6 +123,11 @@ impl Object {
     */
 }
 
+fn sym_to_str(sym: &Sym) -> String {
+    let interner = INTERNER.read().unwrap();
+    interner.resolve(*sym).unwrap().into()
+}
+
 /*
 impl PartialEq for Callable {
     fn eq(&self, other: &Self) -> bool {
@@ -226,7 +200,17 @@ impl fmt::Display for Object {
             Boolean(b) => write!(f, "{}", b),
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
-            Callable(c) => write!(f, "{:?}", c),
+            Callable(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl fmt::Display for Callable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Callable::*;
+        match self {
+            Native(func) => write!(f, "[built-in fun {}]", func.name),
+            Lox(func) => write!(f, "[fun {}]", sym_to_str(&func.name)),
         }
     }
 }
@@ -245,7 +229,7 @@ impl fmt::Debug for Object {
             Boolean(b) => write!(f, "{:?}", b),
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
-            Callable(c) => write!(f, "{:?}", c),
+            Callable(c) => write!(f, "{}", c),
         }
     }
 }

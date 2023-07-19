@@ -1,5 +1,5 @@
-use crate::object::Object;
 use crate::object::LoxFunction;
+use crate::object::Object;
 use crate::source::SourceLocation;
 use crate::token::Operator;
 use std::fmt;
@@ -23,6 +23,7 @@ pub enum StmtKind {
     FunctionDeclaration(LoxFunction),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
+    Return(Expr),
 
     // the Sym is the variable name, the Expr is the initializer
     VariableDeclaration(Sym, Option<Expr>),
@@ -78,7 +79,11 @@ impl fmt::Display for StmtKind {
                 write!(f, ")")
             }
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
-            StmtKind::FunctionDeclaration(LoxFunction{name, parameters, body}) => {
+            StmtKind::FunctionDeclaration(LoxFunction {
+                name,
+                parameters,
+                body,
+            }) => {
                 write!(f, "(fun-stmt {:?} (", name)?;
                 for p in parameters {
                     write!(f, " {:?}", p)?;
@@ -94,6 +99,7 @@ impl fmt::Display for StmtKind {
                 None => write!(f, "(if-stmt {} {})", cond, then_block),
             },
             StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
+            StmtKind::Return(expr) => write!(f, "(return-stmt {})", expr),
             StmtKind::VariableDeclaration(sym, expr) => match expr {
                 Some(e) => write!(f, "(var-stmt {:?} {})", sym, e),
                 None => write!(f, "(var-stmt {:?})", sym),

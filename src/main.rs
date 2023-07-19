@@ -48,6 +48,7 @@ mod source;
 mod token;
 
 use interpreter::Interpreter;
+use interpreter::ErrorOrReturn;
 use parser::Parser;
 use result::Result;
 use scanner::Scanner;
@@ -192,11 +193,15 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
 
     interpreter.init_global_environment();
 
-    if let Some(obj) = interpreter.interpret_slice(&statements[..])? {
-        let s = format!("{}", obj);
+    let obj = match interpreter.interpret_slice(&statements[..]) {
+        Ok(obj) => obj,
+        Err(eor) => match eor {
+            ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
+            ErrorOrReturn::Return(v) => v,
+        }
+    };
 
-        Ok(Some(s))
-    } else {
-        Ok(None)
-    }
+    let s = format!("{}", obj);
+
+    Ok(Some(s))
 }

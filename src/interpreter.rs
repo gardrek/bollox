@@ -1,7 +1,7 @@
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
-use crate::object::Object;
 use crate::object::Callable;
 use crate::object::NativeFunction;
+use crate::object::Object;
 use crate::source::SourceLocation;
 use crate::token::Operator;
 use crate::INTERNER;
@@ -11,13 +11,13 @@ use string_interner::Sym;
 
 #[derive(Default, Clone)]
 pub struct Environment {
-    pub enclosing: Option<Box<Environment>>,
+    enclosing: Option<Box<Environment>>,
     bindings: HashMap<Sym, Object>,
 }
 
 #[derive(Default)]
 pub struct Interpreter {
-    pub environment: Environment,
+    environment: Environment,
     globals: Environment,
 }
 
@@ -30,7 +30,7 @@ impl Environment {
     }
 
     pub fn define(&mut self, sym: &Sym, obj: Object) -> Option<Object> {
-        self.bindings.insert(sym.clone(), obj)
+        self.bindings.insert(*sym, obj)
     }
 
     fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
@@ -109,16 +109,19 @@ impl Interpreter {
     }
 
     pub fn init_global_environment(&mut self) {
-        fn clock_fn(_interpreter: &mut Interpreter, _args: Vec<Object>) -> Result<Option<Object>, RuntimeError> {
+        fn clock_fn(
+            _interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
             use std::time::{SystemTime, UNIX_EPOCH};
 
-            Ok(Some(Object::Number(
+            Ok(Object::Number(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .expect("Time went backwards")
                     .as_millis() as f64
                     / 1000.0,
-            )))
+            ))
         }
 
         self.define_global_item("clock", 0, clock_fn);
@@ -128,7 +131,7 @@ impl Interpreter {
         &mut self,
         name: &'static str,
         arity: usize,
-        func: fn(&mut Interpreter, Vec<Object>) -> Result<Option<Object>, RuntimeError>,
+        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
     ) {
         let mut interner = INTERNER.write().unwrap();
 
@@ -144,10 +147,7 @@ impl Interpreter {
         );
     }
 
-    pub fn interpret_statement(
-        &mut self,
-        statement: &Stmt,
-    ) -> Result<Option<Object>, RuntimeError> {
+    pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ErrorOrReturn> {
         use StmtKind::*;
         Ok(match &statement.kind {
             Block(stmts) => {
@@ -155,27 +155,31 @@ impl Interpreter {
                 let (environment, err) = self.execute_block(stmts, environment.new_inner());
                 self.environment = environment;
                 if let Some(e) = err {
-                    return Err(e);
+                    return Err(e.into());
                 }
-                None
+                Object::Nil
             }
-            Expr(expr) => Some(self.evaluate(&expr)?),
+            Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
-                let name = func.name.clone();
-                self.environment.define(&name, Object::Callable(Callable::Lox(func.clone())));
-                None
-            },
+                let name = func.name;
+                self.environment
+                    .define(&name, Object::Callable(Callable::Lox(func.clone())));
+                Object::Nil
+            }
             If(cond, then_block, else_block) => {
-                if self.evaluate(&cond)?.is_truthy() {
+                if self.evaluate(cond)?.is_truthy() {
                     self.interpret_statement(then_block)?;
                 } else if let Some(e) = else_block {
                     self.interpret_statement(e)?;
                 }
-                None
+                Object::Nil
             }
             Print(expr) => {
-                println!("{}", self.evaluate(&expr)?);
-                None
+                println!("{}", self.evaluate(expr)?);
+                Object::Nil
+            }
+            Return(expr) => {
+                return Err(ErrorOrReturn::Return(self.evaluate(expr)?));
             }
             VariableDeclaration(sym, maybe_init) => {
                 let obj = match maybe_init {
@@ -183,32 +187,35 @@ impl Interpreter {
                     None => Object::Nil,
                 };
                 self.environment.define(sym, obj);
-                None
+                Object::Nil
             }
             While(cond, body) => {
-                while self.evaluate(&cond)?.is_truthy() {
+                while self.evaluate(cond)?.is_truthy() {
                     self.interpret_statement(body)?;
                 }
-                None
+                Object::Nil
             }
         })
     }
 
-    pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Option<Object>, RuntimeError> {
+    pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Object, ErrorOrReturn> {
         let mut obj = None;
         for statement in statements {
             //~ eprintln!("{}", statement);
-            obj = self.interpret_statement(statement)?;
+            obj = Some(self.interpret_statement(statement)?);
         }
-        Ok(obj)
+
+        Ok(match obj {
+            Some(o) => o,
+            None => Object::Nil,
+        })
     }
 
     fn execute_block(
         &mut self,
         stmts: &[Stmt],
         environment: Environment,
-        //~ ) -> Result<(), RuntimeError> {
-    ) -> (Environment, Option<RuntimeError>) {
+    ) -> (Environment, Option<ErrorOrReturn>) {
         self.environment = environment;
 
         let result = self.interpret_slice(stmts);
@@ -228,7 +235,45 @@ impl Interpreter {
         (env, err)
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<Object, RuntimeError> {
+    pub fn call(
+        &mut self,
+        callee: &Callable,
+        arguments: Vec<Object>,
+    ) -> Result<Object, ErrorOrReturn> {
+        use Callable::*;
+        match callee {
+            Native(f) => (f.func)(self, arguments),
+            Lox(f) => {
+                let environment = std::mem::take(&mut self.environment);
+
+                let mut environment = environment.new_inner();
+
+                let mut i = 0;
+                for arg in arguments.into_iter() {
+                    environment.define(&f.parameters[i], arg);
+                    i += 1;
+                }
+
+                self.environment = environment;
+
+                let ret = self.interpret_slice(&f.body[..]);
+
+                let environment = std::mem::take(&mut self.environment);
+
+                self.environment = *environment.enclosing.unwrap();
+
+                Ok(match ret {
+                    Ok(obj) => obj,
+                    Err(eor) => match eor {
+                        ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
+                        ErrorOrReturn::Return(v) => v,
+                    }
+                })
+            }
+        }
+    }
+
+    fn evaluate(&mut self, expr: &Expr) -> Result<Object, ErrorOrReturn> {
         use ExprKind::*;
         use Object::*;
         use Operator::*;
@@ -244,7 +289,7 @@ impl Interpreter {
                                 return Err(RuntimeError::type_error(
                                     "Attempt to arithmetically negate a non-number.",
                                     expr.location.clone(),
-                                ))
+                                ).into());
                             }
                         };
                         Object::Number(-inner)
@@ -257,7 +302,7 @@ impl Interpreter {
                         return Err(RuntimeError::ice(
                             "op is not a unary operator. bad syntax tree",
                             expr.location.clone(),
-                        ))
+                        ).into())
                     }
                 }
             }
@@ -271,13 +316,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot subtract, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot subtract, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     Plus => match (left, right) {
@@ -286,7 +331,7 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot add, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         (String(left_s), String(right_s)) => {
                             Object::String(left_s.concat(right_s))
@@ -299,13 +344,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot concat, second arg not a string",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot use plus, first arg not a number or string",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     Slash => match (left, right) {
@@ -314,13 +359,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot divide, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot divide, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     Star => match (left, right) {
@@ -329,13 +374,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot multiply, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot multiply, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     Greater => match (left, right) {
@@ -344,13 +389,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     Less => match (left, right) {
@@ -359,13 +404,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     GreaterEqual => match (left, right) {
@@ -374,13 +419,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     LessEqual => match (left, right) {
@@ -389,13 +434,13 @@ impl Interpreter {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, second arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                         _ => {
                             return Err(RuntimeError::type_error(
                                 "Cannot compare, first arg not a number",
                                 expr.location.clone(),
-                            ))
+                            ).into());
                         }
                     },
                     BangEqual => Object::Boolean(left != right),
@@ -404,13 +449,13 @@ impl Interpreter {
                         return Err(RuntimeError::unimplemented(
                             "Unimplemented binary operator",
                             expr.location.clone(),
-                        ))
+                        ).into());
                     }
                     Bang => {
                         return Err(RuntimeError::ice(
                             "op is not a binary operator. bad syntax tree",
                             expr.location.clone(),
-                        ))
+                        ).into());
                     }
                 }
             }
@@ -427,7 +472,7 @@ impl Interpreter {
 
                     value
                 } else {
-                    return Err(RuntimeError::undefined_variable(expr.location.clone()));
+                    return Err(RuntimeError::undefined_variable(expr.location.clone()).into());
                 }
             }
             LogicalOr(left, right) => {
@@ -459,13 +504,13 @@ impl Interpreter {
                     evaluated_args.push(self.evaluate(a)?);
                 }
 
-                let mut callee = match callee {
+                let callee = match callee {
                     Callable(c) => c,
                     _ => {
                         return Err(RuntimeError::type_error(
                             "Attempt to call uncallable type",
                             location,
-                        ));
+                        ).into());
                     }
                 };
 
@@ -473,13 +518,10 @@ impl Interpreter {
                     return Err(RuntimeError::type_error(
                         "Incorrect number of arguments",
                         location,
-                    ));
+                    ).into());
                 }
 
-                match callee.call(self, evaluated_args)? {
-                    Some(obj) => obj,
-                    None => Object::Nil,
-                }
+                self.call(&callee, evaluated_args)?
             }
         })
     }
@@ -500,7 +542,19 @@ pub enum RuntimeErrorKind {
     UndefinedVariable,
 }
 
+#[derive(Debug, Clone)]
+pub enum ErrorOrReturn {
+    RuntimeError(RuntimeError),
+    Return(Object),
+}
+
+impl From<RuntimeError> for ErrorOrReturn {
+    fn from(other: RuntimeError) -> Self { ErrorOrReturn::RuntimeError(other) }
+}
+
 impl std::error::Error for RuntimeError {}
+
+//~ impl std::error::Error for Exception {}
 
 impl RuntimeError {
     pub fn ice(message: &'static str, location: SourceLocation) -> RuntimeError {
