@@ -180,6 +180,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         }
 
         //~ /*
+        eprintln!();
         for s in &statements {
             //~ eprint!("{} ", s);
             eprintln!("{}", s);

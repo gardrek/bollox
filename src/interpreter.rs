@@ -67,6 +67,33 @@ impl Environment {
             None
         }
     }
+
+    pub fn flat_copy(&self) -> Rc<RefCell<Environment>> {
+        let bindings = self.bindings_flattened();
+
+        Rc::new(RefCell::new(Environment {
+            enclosing: None,
+            bindings,
+        }))
+    }
+
+    pub fn bindings_flattened(&self) -> HashMap<Sym, Object> {
+        let bindings = HashMap::new();
+        self.flatten_recurse(bindings)
+    }
+
+    fn flatten_recurse(&self, bindings: HashMap<Sym, Object>) -> HashMap<Sym, Object> {
+        //~ bindings.extend(self.bindings.clone());
+
+        let mut next_bindings = self.bindings.clone();
+
+        next_bindings.extend(bindings);
+
+        match &self.enclosing {
+            Some(e) => e.borrow().flatten_recurse(next_bindings),
+            None => next_bindings,
+        }
+    }
 }
 
 impl Interpreter {
@@ -149,7 +176,10 @@ impl Interpreter {
             Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
                 let name = func.name;
-                let obj = Object::Callable(Callable::Lox(func.clone(), self.environment.clone()));
+                let obj = Object::Callable(Callable::Lox(
+                    func.clone(),
+                    self.environment.clone().borrow().flat_copy(),
+                ));
                 self.environment.borrow_mut().define(&name, obj);
                 Object::Nil
             }
@@ -231,8 +261,6 @@ impl Interpreter {
         match callee {
             Native(f) => (f.func)(self, arguments),
             Lox(f, closure) => {
-                let old_environment = std::mem::take(&mut self.environment);
-
                 let call_environment = Environment::new_inner(closure.clone());
 
                 let mut i = 0;
@@ -240,6 +268,8 @@ impl Interpreter {
                     call_environment.borrow_mut().define(&f.parameters[i], arg);
                     i += 1;
                 }
+
+                let old_environment = std::mem::take(&mut self.environment);
 
                 self.environment = call_environment;
 
