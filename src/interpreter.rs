@@ -27,7 +27,7 @@ pub struct Interpreter {
 impl Environment {
     pub fn new_inner(env: Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
         Rc::new(RefCell::new(Environment {
-            enclosing: Some(env.clone()),
+            enclosing: Some(env),
             bindings: HashMap::default(),
         }))
     }
@@ -169,17 +169,16 @@ impl Interpreter {
                     self.execute_block(stmts, Environment::new_inner(environment));
                 self.environment = environment;
                 if let Some(e) = err {
-                    return Err(e.into());
+                    return Err(e);
                 }
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
                 let name = func.name;
-                let obj = Object::Callable(Callable::Lox(
-                    func.clone(),
-                    self.environment.clone().borrow().flat_copy(),
-                ));
+                let closure = self.environment.borrow().flat_copy();
+                let obj = Object::Callable(Callable::Lox(func.clone(), closure.clone()));
+                closure.borrow_mut().define(&name, obj.clone());
                 self.environment.borrow_mut().define(&name, obj);
                 Object::Nil
             }
@@ -200,7 +199,7 @@ impl Interpreter {
             }
             VariableDeclaration(sym, maybe_init) => {
                 let obj = match maybe_init {
-                    Some(init) => self.evaluate(&init)?,
+                    Some(init) => self.evaluate(init)?,
                     None => Object::Nil,
                 };
                 self.environment.borrow_mut().define(sym, obj);
@@ -263,10 +262,8 @@ impl Interpreter {
             Lox(f, closure) => {
                 let call_environment = Environment::new_inner(closure.clone());
 
-                let mut i = 0;
-                for arg in arguments.into_iter() {
+                for (i, arg) in arguments.into_iter().enumerate() {
                     call_environment.borrow_mut().define(&f.parameters[i], arg);
-                    i += 1;
                 }
 
                 let old_environment = std::mem::take(&mut self.environment);
@@ -498,8 +495,7 @@ impl Interpreter {
             Grouping(inside) => self.evaluate(inside)?,
             VariableAccess(sym) => self
                 .get_binding(sym)
-                .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
-                .clone(),
+                .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?,
             Assign(sym, expr) => {
                 if self.environment.borrow().is_defined(sym) {
                     let value = self.evaluate(expr)?;

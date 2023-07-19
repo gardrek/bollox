@@ -157,16 +157,12 @@ impl Parser {
     }
 
     fn consume_identifier(&mut self) -> Result<string_interner::Sym, ParseError> {
-        match self.peek() {
-            Some(t) => match &t.kind {
-                TokenKind::Identifier(sym) => {
-                    let sym = *sym;
-                    self.advance();
-                    return Ok(sym);
-                }
-                _ => (),
-            },
-            None => (),
+        if let Some(t) = self.peek() {
+            if let TokenKind::Identifier(sym) = &t.kind {
+                let sym = *sym;
+                self.advance();
+                return Ok(sym);
+            }
         }
 
         Err(self.error(ParseErrorKind::ExpectedIdentifier))
@@ -314,9 +310,9 @@ impl Parser {
             loop {
                 parameters.push(self.consume_identifier()?);
 
-                if !self
+                if self
                     .check_advance(&[TokenKind::Op(Operator::Comma)])
-                    .is_some()
+                    .is_none()
                 {
                     break;
                 }
@@ -735,9 +731,9 @@ impl Parser {
             loop {
                 arguments.push(self.expression()?);
 
-                if !self
+                if self
                     .check_advance(&[TokenKind::Op(Operator::Comma)])
-                    .is_some()
+                    .is_none()
                 {
                     break;
                 }
