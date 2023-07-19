@@ -1,10 +1,26 @@
 use std::fmt;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::interpreter::Interpreter;
+use crate::interpreter::Environment;
 use crate::interpreter::ErrorOrReturn;
+use crate::interpreter::Interpreter;
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
+
 use string_interner::Sym;
+
+/*
+pub struct RcObject(Rc<RefCell<Object>>);
+
+impl RcObject {
+    pub fn from_object(obj: Object) -> RcObject {
+        RcObject(Rc::new(RefCell::new(obj)))
+    }
+
+    pub fn borrow_mut() {}
+}
+*/
 
 #[derive(Clone)]
 pub enum Object {
@@ -22,10 +38,10 @@ pub enum StringKind {
     Cat(Box<StringKind>, Box<StringKind>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Callable {
     Native(NativeFunction),
-    Lox(LoxFunction),
+    Lox(LoxFunction, Rc<RefCell<Environment>>),
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +63,7 @@ impl Callable {
         use Callable::*;
         match self {
             Native(f) => f.arity,
-            Lox(f) => f.parameters.len(),
+            Lox(f, _) => f.parameters.len(),
         }
     }
 }
@@ -128,15 +144,18 @@ fn sym_to_str(sym: &Sym) -> String {
     interner.resolve(*sym).unwrap().into()
 }
 
-/*
 impl PartialEq for Callable {
     fn eq(&self, other: &Self) -> bool {
-        // I believe this is allowed in the PartialEq specs
-        // But we cannot implement Eq
-        false
+        use Callable::*;
+        match (&self, &other) {
+            (Native(f), Native(g)) => f == g,
+            (Lox(f, _), Lox(g, _)) => f == g,
+
+            #[allow(unreachable_patterns)]
+            (Native(_), _) | (_, Native(_)) | (Lox(_, _), _) | (_, Lox(_, _)) => false,
+        }
     }
 }
-*/
 
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &Self) -> bool {
@@ -162,14 +181,18 @@ impl PartialEq for Object {
                 }
             },
             (Callable(a), Callable(b)) => a == b,
-            (Nil, _) => false,
-            (_, Nil) => false,
-            (Boolean(_), _) => false,
-            (_, Boolean(_)) => false,
-            (Number(_), _) => false,
-            (_, Number(_)) => false,
-            (Callable(_), _) => false,
-            (_, Callable(_)) => false,
+
+            #[allow(unreachable_patterns)]
+            (Nil, _)
+            | (_, Nil)
+            | (Boolean(_), _)
+            | (_, Boolean(_))
+            | (Number(_), _)
+            | (_, Number(_))
+            | (String(_), _)
+            | (_, String(_))
+            | (Callable(_), _)
+            | (_, Callable(_)) => false,
         }
     }
 }
@@ -210,7 +233,7 @@ impl fmt::Display for Callable {
         use Callable::*;
         match self {
             Native(func) => write!(f, "[built-in fun {}]", func.name),
-            Lox(func) => write!(f, "[fun {}]", sym_to_str(&func.name)),
+            Lox(func, _) => write!(f, "[fun {}]", sym_to_str(&func.name)),
         }
     }
 }

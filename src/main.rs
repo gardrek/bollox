@@ -47,8 +47,8 @@ mod scanner;
 mod source;
 mod token;
 
-use interpreter::Interpreter;
 use interpreter::ErrorOrReturn;
+use interpreter::Interpreter;
 use parser::Parser;
 use result::Result;
 use scanner::Scanner;
@@ -152,7 +152,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         }
     }
 
-    /*
+    //~ /*
     for tk in &tokens {
         eprint!("{} ", tk);
         //~ eprintln!();
@@ -198,7 +198,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
         Err(eor) => match eor {
             ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
             ErrorOrReturn::Return(v) => v,
-        }
+        },
     };
 
     let s = format!("{}", obj);
