@@ -19,6 +19,7 @@ impl Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Block(Vec<Stmt>),
+    Class(Sym, Vec<Stmt>),
     Expr(Expr),
     FunctionDeclaration(LoxFunction),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -48,6 +49,8 @@ pub enum ExprKind {
     LogicalOr(Box<Expr>, Box<Expr>),
     LogicalAnd(Box<Expr>, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    PropertyAccess(Box<Expr>, Sym),
+    PropertyAssign(Box<Expr>, Sym, Box<Expr>),
 }
 
 impl fmt::Display for Stmt {
@@ -78,6 +81,7 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
+            StmtKind::Class(name, _) => write!(f, "(class-stmt {:?})", name),
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration(LoxFunction {
                 name,
@@ -104,7 +108,7 @@ impl fmt::Display for StmtKind {
                 Some(e) => write!(f, "(var-stmt {:?} {})", sym, e),
                 None => write!(f, "(var-stmt {:?})", sym),
             },
-            StmtKind::While(cond, body) => write!(f, "(while-stmt {}, {})", cond, body),
+            StmtKind::While(cond, body) => write!(f, "(while-stmt {} {})", cond, body),
         }
     }
 }
@@ -127,6 +131,10 @@ impl fmt::Display for ExprKind {
                     write!(f, " {}", e)?;
                 }
                 write!(f, ")")
+            }
+            PropertyAccess(obj, name) => write!(f, "(property-access {} {:?})", obj, name),
+            PropertyAssign(obj, name, value) => {
+                write!(f, "(property-assign {} {:?} {})", obj, name, value)
             }
         }
     }

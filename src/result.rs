@@ -29,6 +29,7 @@ impl Error {
     pub fn get_location(&self) -> Option<&SourceLocation> {
         Some(match self {
             Self::Parser(e) => &e.location,
+            Self::Runtime(e) => &e.location,
             e => {
                 eprintln!("error location unimplemented for {}", e);
                 return None;

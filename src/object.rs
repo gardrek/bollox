@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -10,18 +11,6 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
-/*
-pub struct RcObject(Rc<RefCell<Object>>);
-
-impl RcObject {
-    pub fn from_object(obj: Object) -> RcObject {
-        RcObject(Rc::new(RefCell::new(obj)))
-    }
-
-    pub fn borrow_mut() {}
-}
-*/
-
 #[derive(Clone)]
 pub enum Object {
     Nil,
@@ -29,6 +18,35 @@ pub enum Object {
     Number(f64),
     String(StringKind),
     Callable(Callable),
+    //~ Instance(Instance),
+    Instance(Rc<RefCell<Instance>>),
+}
+
+impl Object {
+    /*
+        pub fn nil() -> Object {
+            Object::Nil
+        }
+
+        pub fn boolean(b: bool) -> Object {
+            Object::Boolean(b)
+        }
+
+        pub fn number(n: f64) -> Object {
+            Object::Number(n)
+        }
+
+        pub fn static_string(s: Sym) -> Object {
+            Object::String(StringKind::Static(s))
+        }
+    */
+
+    pub fn new_instance(class: Class) -> Object {
+        Object::Instance(Rc::new(RefCell::new(Instance {
+            class,
+            fields: HashMap::default(),
+        })))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +60,28 @@ pub enum StringKind {
 pub enum Callable {
     Native(NativeFunction),
     Lox(LoxFunction, Rc<RefCell<Environment>>),
+    Class(Class),
+}
+
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub name: Sym,
+}
+
+#[derive(Debug, Clone)]
+pub struct Instance {
+    pub class: Class,
+    fields: HashMap<Sym, Object>,
+}
+
+impl Instance {
+    pub fn get(&self, name: &Sym) -> Option<&Object> {
+        self.fields.get(name)
+    }
+
+    pub fn set(&mut self, name: &Sym, value: Object) {
+        self.fields.insert(*name, value);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +104,7 @@ impl Callable {
         match self {
             Native(f) => f.arity,
             Lox(f, _) => f.parameters.len(),
+            Class(_) => 0,
         }
     }
 }
@@ -150,9 +191,15 @@ impl PartialEq for Callable {
         match (&self, &other) {
             (Native(f), Native(g)) => f == g,
             (Lox(f, _), Lox(g, _)) => f == g,
+            (Class(_), Class(_)) => todo!(),
 
             #[allow(unreachable_patterns)]
-            (Native(_), _) | (_, Native(_)) | (Lox(_, _), _) | (_, Lox(_, _)) => false,
+            (Native(_), _)
+            | (_, Native(_))
+            | (Lox(_, _), _)
+            | (_, Lox(_, _))
+            | (Class(_), _)
+            | (_, Class(_)) => false,
         }
     }
 }
@@ -181,6 +228,7 @@ impl PartialEq for Object {
                 }
             },
             (Callable(a), Callable(b)) => a == b,
+            (Instance(_), Instance(_)) => todo!(),
 
             #[allow(unreachable_patterns)]
             (Nil, _)
@@ -192,7 +240,9 @@ impl PartialEq for Object {
             | (String(_), _)
             | (_, String(_))
             | (Callable(_), _)
-            | (_, Callable(_)) => false,
+            | (_, Callable(_))
+            | (Instance(_), _)
+            | (_, Instance(_)) => false,
         }
     }
 }
@@ -224,6 +274,7 @@ impl fmt::Display for Object {
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
             Callable(c) => write!(f, "{}", c),
+            Instance(inst) => write!(f, "[instance of {:?}]", inst.borrow().class),
         }
     }
 }
@@ -234,6 +285,7 @@ impl fmt::Display for Callable {
         match self {
             Native(func) => write!(f, "[built-in fun {}]", func.name),
             Lox(func, _) => write!(f, "[fun {}]", sym_to_str(&func.name)),
+            Class(c) => write!(f, "[class {:?}]", c),
         }
     }
 }
@@ -253,6 +305,7 @@ impl fmt::Debug for Object {
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
             Callable(c) => write!(f, "{}", c),
+            Instance(inst) => write!(f, "[instance of {:?}]", inst.borrow().class),
         }
     }
 }

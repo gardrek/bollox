@@ -13,6 +13,7 @@ pub enum ParseErrorKind {
     Ice(&'static str),
     MaxArgumentsExceeded,
     UnexpectedToken(Token),
+    InvalidAssignmentTarget,
 }
 
 impl From<ParseError> for crate::result::Error {
@@ -50,6 +51,7 @@ impl core::fmt::Display for ParseErrorKind {
                 MAX_ARGUMENTS
             ),
             UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
+            InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
         }
     }
 }
@@ -283,6 +285,13 @@ impl Parser {
 impl Parser {
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
         if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Class)])
+            .is_some()
+        {
+            return self.class_declaration();
+        }
+
+        if self
             .check_advance(&[TokenKind::Reserved(ReservedWord::Fun)])
             .is_some()
         {
@@ -297,6 +306,22 @@ impl Parser {
         }
 
         self.statement()
+    }
+
+    fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume_identifier()?;
+
+        self.consume_expected(&[TokenKind::LeftBrace])?;
+
+        let mut methods = vec![];
+
+        while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
+            methods.push(self.function_declaration()?);
+        }
+
+        self.consume_expected(&[TokenKind::RightBrace])?;
+
+        Ok(Stmt::new(StmtKind::Class(name, methods)))
     }
 
     fn function_declaration(&mut self) -> Result<Stmt, ParseError> {
@@ -603,7 +628,13 @@ impl Parser {
                     location: expr.location,
                     kind: ExprKind::Assign(name, Box::new(value?)),
                 },
-                _ => panic!("invalid assignment target"),
+                ExprKind::PropertyAccess(obj, name) => Expr {
+                    location: expr.location,
+                    kind: ExprKind::PropertyAssign(obj, name, Box::new(value?)),
+                },
+
+                // TODO: Can we report and synchronize here?
+                _ => return Err(self.error(ParseErrorKind::InvalidAssignmentTarget)),
             });
         }
 
@@ -716,6 +747,16 @@ impl Parser {
         loop {
             if self.check_advance(&[TokenKind::LeftParen]).is_some() {
                 expr = self.finish_call(expr)?;
+            } else if self
+                .check_advance(&[TokenKind::Op(Operator::Dot)])
+                .is_some()
+            {
+                let name = self.consume_identifier()?;
+
+                expr = Expr {
+                    location: self.peek_previous().unwrap().location.clone(),
+                    kind: ExprKind::PropertyAccess(Box::new(expr), name),
+                };
             } else {
                 break;
             }

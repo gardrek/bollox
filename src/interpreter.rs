@@ -173,6 +173,13 @@ impl Interpreter {
                 }
                 Object::Nil
             }
+            Class(name, _body) => {
+                let _closure = self.environment.borrow().flat_copy();
+                let obj = Object::Callable(Callable::Class(crate::object::Class { name: *name }));
+                _closure.borrow_mut().define(&name, obj.clone());
+                self.environment.borrow_mut().define(&name, obj);
+                Object::Nil
+            }
             Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
                 let name = func.name;
@@ -282,6 +289,7 @@ impl Interpreter {
                     },
                 })
             }
+            Class(class) => Ok(Object::new_instance(class.clone())),
         }
     }
 
@@ -557,6 +565,53 @@ impl Interpreter {
 
                 self.call(&callee, evaluated_args)?
             }
+            PropertyAccess(expr, name) => {
+                let location = expr.location.clone();
+
+                let obj = self.evaluate(expr)?;
+
+                match obj {
+                    Instance(instance) => match instance.borrow().get(name) {
+                        Some(o) => o.clone(),
+                        None => {
+                            return Err(RuntimeError::type_error(
+                                "Cannot access nonexistent property",
+                                location,
+                            )
+                            .into())
+                        }
+                    },
+                    _ => {
+                        return Err(RuntimeError::type_error(
+                            "Cannot access property, not an instance",
+                            location,
+                        )
+                        .into())
+                    }
+                }
+            }
+            PropertyAssign(obj, name, value) => {
+                let location = obj.location.clone();
+
+                let obj = self.evaluate(obj)?;
+
+                match obj {
+                    Instance(instance) => {
+                        let value = self.evaluate(value)?;
+
+                        instance.borrow_mut().set(name, value.clone());
+
+                        value
+                    }
+                    _ => {
+                        return Err(RuntimeError::type_error(
+                            "Cannot access property, not an instance",
+                            location,
+                        )
+                        .into())
+                    }
+                }
+            }
         })
     }
 }
@@ -565,7 +620,7 @@ impl Interpreter {
 pub struct RuntimeError {
     message: &'static str,
     kind: RuntimeErrorKind,
-    location: SourceLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
