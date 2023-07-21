@@ -59,13 +59,26 @@ pub enum StringKind {
 #[derive(Debug, Clone)]
 pub enum Callable {
     Native(NativeFunction),
-    Lox(LoxFunction, Rc<RefCell<Environment>>),
+    Lox(LoxFunction),
     Class(Class),
 }
 
 #[derive(Debug, Clone)]
 pub struct Class {
     pub name: Sym,
+    pub methods: HashMap<Sym, LoxFunction>,
+}
+
+impl Class {
+    pub fn get_method(&self, name: &Sym) -> Option<LoxFunction> {
+        match self.methods.get(name) {
+            Some(method) => {
+                let method = method.clone();
+                Some(method)
+            }
+            None => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,8 +88,11 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn get(&self, name: &Sym) -> Option<&Object> {
-        self.fields.get(name)
+    pub fn get(&self, name: &Sym) -> Option<Object> {
+        match self.fields.get(name) {
+            Some(o) => Some(o.clone()),
+            None => None,
+        }
     }
 
     pub fn set(&mut self, name: &Sym, value: Object) {
@@ -89,6 +105,7 @@ pub struct LoxFunction {
     pub name: Sym,
     pub parameters: Vec<Sym>,
     pub body: Vec<crate::ast::Stmt>,
+    pub closure: Rc<RefCell<Environment>>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -103,8 +120,19 @@ impl Callable {
         use Callable::*;
         match self {
             Native(f) => f.arity,
-            Lox(f, _) => f.parameters.len(),
-            Class(_) => 0,
+            Lox(f) => f.parameters.len(),
+            Class(class) => {
+                let sym = {
+                    let mut interner = INTERNER.write().unwrap();
+                    interner.get_or_intern("init")
+                };
+
+                if let Some(f) = class.get_method(&sym) {
+                    f.parameters.len()
+                } else {
+                    0
+                }
+            }
         }
     }
 }
@@ -190,14 +218,14 @@ impl PartialEq for Callable {
         use Callable::*;
         match (&self, &other) {
             (Native(f), Native(g)) => f == g,
-            (Lox(f, _), Lox(g, _)) => f == g,
+            (Lox(f), Lox(g)) => f == g,
             (Class(_), Class(_)) => todo!(),
 
             #[allow(unreachable_patterns)]
             (Native(_), _)
             | (_, Native(_))
-            | (Lox(_, _), _)
-            | (_, Lox(_, _))
+            | (Lox(_), _)
+            | (_, Lox(_))
             | (Class(_), _)
             | (_, Class(_)) => false,
         }
@@ -274,7 +302,7 @@ impl fmt::Display for Object {
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
             Callable(c) => write!(f, "{}", c),
-            Instance(inst) => write!(f, "[instance of {:?}]", inst.borrow().class),
+            Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
         }
     }
 }
@@ -284,9 +312,15 @@ impl fmt::Display for Callable {
         use Callable::*;
         match self {
             Native(func) => write!(f, "[built-in fun {}]", func.name),
-            Lox(func, _) => write!(f, "[fun {}]", sym_to_str(&func.name)),
-            Class(c) => write!(f, "[class {:?}]", c),
+            Lox(func) => write!(f, "[fun {}]", sym_to_str(&func.name)),
+            Class(c) => write!(f, "[class {}]", c),
         }
+    }
+}
+
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.name)
     }
 }
 
@@ -305,7 +339,7 @@ impl fmt::Debug for Object {
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
             Callable(c) => write!(f, "{}", c),
-            Instance(inst) => write!(f, "[instance of {:?}]", inst.borrow().class),
+            Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
         }
     }
 }

@@ -25,10 +25,7 @@ pub enum StmtKind {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr),
-
-    // the Sym is the variable name, the Expr is the initializer
     VariableDeclaration(Sym, Option<Expr>),
-
     While(Expr, Box<Stmt>),
 }
 
@@ -51,6 +48,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     PropertyAccess(Box<Expr>, Sym),
     PropertyAssign(Box<Expr>, Sym, Box<Expr>),
+    This,
 }
 
 impl fmt::Display for Stmt {
@@ -87,6 +85,7 @@ impl fmt::Display for StmtKind {
                 name,
                 parameters,
                 body,
+                closure: _,
             }) => {
                 write!(f, "(fun-stmt {:?} (", name)?;
                 for p in parameters {
@@ -136,6 +135,7 @@ impl fmt::Display for ExprKind {
             PropertyAssign(obj, name, value) => {
                 write!(f, "(property-assign {} {:?} {})", obj, name, value)
             }
+            This => write!(f, "(this)"),
         }
     }
 }

@@ -359,6 +359,7 @@ impl Parser {
                 name,
                 parameters,
                 body,
+                closure: Default::default(),
             },
         )))
     }
@@ -826,6 +827,14 @@ impl Parser {
                     Ok(Expr {
                         location,
                         kind: ExprKind::Grouping(Box::new(expr)),
+                    })
+                }
+                TokenKind::Reserved(ReservedWord::This) => {
+                    self.advance();
+
+                    Ok(Expr {
+                        location,
+                        kind: ExprKind::This,
                     })
                 }
                 TokenKind::Identifier(sym) => {

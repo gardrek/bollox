@@ -173,18 +173,51 @@ impl Interpreter {
                 }
                 Object::Nil
             }
-            Class(name, _body) => {
-                let _closure = self.environment.borrow().flat_copy();
-                let obj = Object::Callable(Callable::Class(crate::object::Class { name: *name }));
-                _closure.borrow_mut().define(&name, obj.clone());
+            Class(name, body) => {
+                let method_environment = self.environment.borrow().flat_copy();
+
+                let mut methods = HashMap::default();
+
+                for stmt in body {
+                    let func = match &stmt.kind {
+                        StmtKind::FunctionDeclaration(func) => func,
+                        _ => {
+                            return Err(RuntimeError::ice(
+                                "statement in class is not a method. bad syntax tree",
+                                SourceLocation::bullshit(),
+                            )
+                            .into());
+                        }
+                    };
+
+                    let mut new_func = func.clone();
+
+                    new_func.closure = method_environment.clone();
+
+                    methods.insert(func.name, new_func);
+                }
+
+                let obj = Object::Callable(Callable::Class(crate::object::Class {
+                    name: *name,
+                    methods,
+                }));
+
+                method_environment.borrow_mut().define(&name, obj.clone());
+
                 self.environment.borrow_mut().define(&name, obj);
+
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
                 let name = func.name;
                 let closure = self.environment.borrow().flat_copy();
-                let obj = Object::Callable(Callable::Lox(func.clone(), closure.clone()));
+
+                let mut new_func = func.clone();
+
+                new_func.closure = closure.clone();
+
+                let obj = Object::Callable(Callable::Lox(new_func));
                 closure.borrow_mut().define(&name, obj.clone());
                 self.environment.borrow_mut().define(&name, obj);
                 Object::Nil
@@ -266,7 +299,9 @@ impl Interpreter {
         use Callable::*;
         match callee {
             Native(f) => (f.func)(self, arguments),
-            Lox(f, closure) => {
+            Lox(f) => {
+                let closure = &f.closure;
+
                 let call_environment = Environment::new_inner(closure.clone());
 
                 for (i, arg) in arguments.into_iter().enumerate() {
@@ -289,7 +324,30 @@ impl Interpreter {
                     },
                 })
             }
-            Class(class) => Ok(Object::new_instance(class.clone())),
+            Class(class) => {
+                let instance = Object::new_instance(class.clone());
+
+                let (init, this) = {
+                    let mut interner = INTERNER.write().unwrap();
+                    let init = interner.get_or_intern("init");
+                    let this = interner.get_or_intern("this");
+                    (init, this)
+                };
+
+                if let Some(mut method) = class.get_method(&init) {
+                    let new_env = Environment::new_inner(method.closure.clone());
+
+                    new_env.borrow_mut().define(&this, instance.clone());
+
+                    method.closure = new_env;
+
+                    let callable = crate::object::Callable::Lox(method);
+
+                    self.call(&callable, arguments)?;
+                }
+
+                Ok(instance)
+            }
         }
     }
 
@@ -573,13 +631,29 @@ impl Interpreter {
                 match obj {
                     Instance(instance) => match instance.borrow().get(name) {
                         Some(o) => o.clone(),
-                        None => {
-                            return Err(RuntimeError::type_error(
-                                "Cannot access nonexistent property",
-                                location,
-                            )
-                            .into())
-                        }
+                        None => match instance.borrow().class.get_method(name) {
+                            Some(mut method) => {
+                                let new_env = Environment::new_inner(method.closure.clone());
+
+                                let mut interner = INTERNER.write().unwrap();
+                                let sym = interner.get_or_intern("this");
+
+                                new_env
+                                    .borrow_mut()
+                                    .define(&sym, Object::Instance(instance.clone()));
+
+                                method.closure = new_env;
+
+                                Object::Callable(crate::object::Callable::Lox(method))
+                            }
+                            None => {
+                                return Err(RuntimeError::type_error(
+                                    "Cannot access nonexistent property or method",
+                                    location,
+                                )
+                                .into())
+                            }
+                        },
                     },
                     _ => {
                         return Err(RuntimeError::type_error(
@@ -611,6 +685,13 @@ impl Interpreter {
                         .into())
                     }
                 }
+            }
+            This => {
+                let mut interner = INTERNER.write().unwrap();
+                let sym = interner.get_or_intern("this");
+
+                self.get_binding(&sym)
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
             }
         })
     }
