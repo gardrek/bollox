@@ -41,7 +41,7 @@ impl Object {
         }
     */
 
-    pub fn new_instance(class: Class) -> Object {
+    pub fn new_instance(class: Rc<Class>) -> Object {
         Object::Instance(Rc::new(RefCell::new(Instance {
             class,
             fields: HashMap::default(),
@@ -60,12 +60,13 @@ pub enum StringKind {
 pub enum Callable {
     Native(NativeFunction),
     Lox(LoxFunction),
-    Class(Class),
+    Class(Rc<Class>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Class {
     pub name: Sym,
+    pub superclass: Option<Rc<Class>>,
     pub methods: HashMap<Sym, LoxFunction>,
 }
 
@@ -76,14 +77,20 @@ impl Class {
                 let method = method.clone();
                 Some(method)
             }
-            None => None,
+            None => {
+                if let Some(superclass) = &self.superclass {
+                    superclass.get_method(name)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Instance {
-    pub class: Class,
+    pub class: Rc<Class>,
     fields: HashMap<Sym, Object>,
 }
 
@@ -219,7 +226,7 @@ impl PartialEq for Callable {
         match (&self, &other) {
             (Native(f), Native(g)) => f == g,
             (Lox(f), Lox(g)) => f == g,
-            (Class(_), Class(_)) => todo!(),
+            (Class(class_a), Class(class_b)) => Rc::ptr_eq(class_a, class_b),
 
             #[allow(unreachable_patterns)]
             (Native(_), _)
@@ -256,7 +263,7 @@ impl PartialEq for Object {
                 }
             },
             (Callable(a), Callable(b)) => a == b,
-            (Instance(_), Instance(_)) => todo!(),
+            (Instance(rc_a), Instance(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
 
             #[allow(unreachable_patterns)]
             (Nil, _)
@@ -320,7 +327,7 @@ impl fmt::Display for Callable {
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.name)
+        write!(f, "{}", sym_to_str(&self.name))
     }
 }
 

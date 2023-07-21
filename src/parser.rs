@@ -311,6 +311,17 @@ impl Parser {
     fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume_identifier()?;
 
+        let superclass = if self
+            .check_advance(&[TokenKind::Op(Operator::Less)])
+            .is_some()
+        {
+            let name = self.consume_identifier()?;
+
+            Some(name)
+        } else {
+            None
+        };
+
         self.consume_expected(&[TokenKind::LeftBrace])?;
 
         let mut methods = vec![];
@@ -321,7 +332,7 @@ impl Parser {
 
         self.consume_expected(&[TokenKind::RightBrace])?;
 
-        Ok(Stmt::new(StmtKind::Class(name, methods)))
+        Ok(Stmt::new(StmtKind::Class(name, superclass, methods)))
     }
 
     fn function_declaration(&mut self) -> Result<Stmt, ParseError> {
@@ -827,6 +838,18 @@ impl Parser {
                     Ok(Expr {
                         location,
                         kind: ExprKind::Grouping(Box::new(expr)),
+                    })
+                }
+                TokenKind::Reserved(ReservedWord::Super) => {
+                    self.advance();
+
+                    self.consume_expected(&[TokenKind::Op(Operator::Dot)])?;
+
+                    let method_name = self.consume_identifier()?;
+
+                    Ok(Expr {
+                        location,
+                        kind: ExprKind::Super(method_name),
                     })
                 }
                 TokenKind::Reserved(ReservedWord::This) => {

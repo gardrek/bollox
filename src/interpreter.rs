@@ -173,8 +173,35 @@ impl Interpreter {
                 }
                 Object::Nil
             }
-            Class(name, body) => {
+            Class(name, superclass_name, body) => {
                 let method_environment = self.environment.borrow().flat_copy();
+
+                let superclass = if let Some(superclass_name) = superclass_name {
+                    let superclass = self
+                        .get_binding(superclass_name)
+                        .ok_or(RuntimeError::undefined_variable(SourceLocation::bullshit()))?;
+
+                    let super_name = {
+                        let mut interner = INTERNER.write().unwrap();
+                        interner.get_or_intern("super")
+                    };
+
+                    method_environment
+                        .borrow_mut()
+                        .define(&super_name, superclass.clone());
+
+                    if let Object::Callable(Callable::Class(class)) = superclass {
+                        Some(class)
+                    } else {
+                        return Err(RuntimeError::type_error(
+                            "A class can only inherit from a class",
+                            SourceLocation::bullshit(),
+                        )
+                        .into());
+                    }
+                } else {
+                    None
+                };
 
                 let mut methods = HashMap::default();
 
@@ -197,10 +224,11 @@ impl Interpreter {
                     methods.insert(func.name, new_func);
                 }
 
-                let obj = Object::Callable(Callable::Class(crate::object::Class {
+                let obj = Object::Callable(Callable::Class(Rc::new(crate::object::Class {
                     name: *name,
+                    superclass,
                     methods,
-                }));
+                })));
 
                 method_environment.borrow_mut().define(&name, obj.clone());
 
@@ -623,10 +651,10 @@ impl Interpreter {
 
                 self.call(&callee, evaluated_args)?
             }
-            PropertyAccess(expr, name) => {
-                let location = expr.location.clone();
+            PropertyAccess(obj_expr, name) => {
+                let location = obj_expr.location.clone();
 
-                let obj = self.evaluate(expr)?;
+                let obj = self.evaluate(obj_expr)?;
 
                 match obj {
                     Instance(instance) => match instance.borrow().get(name) {
@@ -692,6 +720,44 @@ impl Interpreter {
 
                 self.get_binding(&sym)
                     .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
+            }
+            Super(method_name) => {
+                let (super_name, this_name) = {
+                    let mut interner = INTERNER.write().unwrap();
+                    (
+                        interner.get_or_intern("super"),
+                        interner.get_or_intern("this"),
+                    )
+                };
+
+                let class = self
+                    .get_binding(&super_name)
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?;
+
+                let this = self
+                    .get_binding(&this_name)
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?;
+
+                let mut method =
+                    if let Object::Callable(crate::object::Callable::Class(class)) = class {
+                        class
+                            .get_method(method_name)
+                            .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
+                    } else {
+                        return Err(RuntimeError::ice(
+                            "super is not a class. bad syntax tree",
+                            SourceLocation::bullshit(),
+                        )
+                        .into());
+                    };
+
+                let new_env = Environment::new_inner(method.closure.clone());
+
+                new_env.borrow_mut().define(&this_name, this.clone());
+
+                method.closure = new_env;
+
+                Object::Callable(crate::object::Callable::Lox(method))
             }
         })
     }

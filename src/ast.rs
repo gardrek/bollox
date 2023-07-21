@@ -19,7 +19,7 @@ impl Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Block(Vec<Stmt>),
-    Class(Sym, Vec<Stmt>),
+    Class(Sym, Option<Sym>, Vec<Stmt>),
     Expr(Expr),
     FunctionDeclaration(LoxFunction),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -49,6 +49,7 @@ pub enum ExprKind {
     PropertyAccess(Box<Expr>, Sym),
     PropertyAssign(Box<Expr>, Sym, Box<Expr>),
     This,
+    Super(Sym),
 }
 
 impl fmt::Display for Stmt {
@@ -79,7 +80,7 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
-            StmtKind::Class(name, _) => write!(f, "(class-stmt {:?})", name),
+            StmtKind::Class(name, _, _) => write!(f, "(class-stmt {:?})", name),
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration(LoxFunction {
                 name,
@@ -136,6 +137,7 @@ impl fmt::Display for ExprKind {
                 write!(f, "(property-assign {} {:?} {})", obj, name, value)
             }
             This => write!(f, "(this)"),
+            Super(expr) => write!(f, "(super {:?})", expr),
         }
     }
 }
