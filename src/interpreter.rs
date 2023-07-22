@@ -168,6 +168,24 @@ impl Interpreter {
 
         self.define_global_item("to_string", 1, to_string);
 
+        fn to_number(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let obj = &args[0];
+
+            Ok(match obj {
+                Object::Number(_) => obj.clone(),
+                Object::String(s) => match s.to_string().parse::<f64>() {
+                    Ok(n) => Object::Number(n),
+                    Err(_) => Object::Nil,
+                },
+                _ => Object::Nil,
+            })
+        }
+
+        self.define_global_item("to_number", 1, to_number);
+
         fn test(
             _interpreter: &mut Interpreter,
             _args: Vec<Object>,
