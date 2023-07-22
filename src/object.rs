@@ -41,6 +41,14 @@ impl Object {
         }
     */
 
+    pub fn static_string(s: &'static str) -> Object {
+        let sym = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern(s)
+        };
+        Object::String(StringKind::Static(sym))
+    }
+
     pub fn dynamic_string(s: String) -> Object {
         Object::String(StringKind::Dynamic(s))
     }
@@ -100,10 +108,7 @@ pub struct Instance {
 
 impl Instance {
     pub fn get(&self, name: &Sym) -> Option<Object> {
-        match self.fields.get(name) {
-            Some(o) => Some(o.clone()),
-            None => None,
-        }
+        self.fields.get(name).cloned()
     }
 
     pub fn set(&mut self, name: &Sym, value: Object) {
@@ -152,7 +157,7 @@ impl StringKind {
     pub fn concat(self, other: Self) -> Self {
         use StringKind::*;
         match (&self, &other) {
-            //~ (Dynamic(_), _) | (_, Dynamic(_)) => unimplemented!(),
+            (Dynamic(_), _) | (_, Dynamic(_)) => Dynamic(format!("{}{}", self, other)),
             (_, _) => Cat(Box::new(self), Box::new(other)),
         }
     }
@@ -259,12 +264,12 @@ impl PartialEq for Object {
             (Number(a), Number(b)) => a == b,
             (String(a_kind), String(b_kind)) => match (a_kind, b_kind) {
                 (Static(a), Static(b)) => a == b,
-                (Dynamic(a), Dynamic(b)) => a == b,
-                (Dynamic(a), _) => a == &b_kind.to_string(),
-                (_, Dynamic(b)) => &a_kind.to_string() == b,
-                (Cat(_, _), Cat(_, _)) | (Cat(_, _), _) | (_, Cat(_, _)) => {
-                    a_kind.to_string() == b_kind.to_string()
-                }
+                (Dynamic(_), Dynamic(_))
+                | (Dynamic(_), _)
+                | (_, Dynamic(_))
+                | (Cat(_, _), Cat(_, _))
+                | (Cat(_, _), _)
+                | (_, Cat(_, _)) => a_kind.to_string() == b_kind.to_string(),
             },
             (Callable(a), Callable(b)) => a == b,
             (Instance(rc_a), Instance(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
@@ -297,7 +302,7 @@ impl fmt::Display for StringKind {
                     let interner = INTERNER.read().unwrap();
                     interner.resolve(*sym).unwrap().into()
                 }
-                Dynamic(s) => format!("{}", s),
+                Dynamic(s) => s.to_string(),
                 Cat(a, b) => format!("{}{}", a, b),
             }
         )

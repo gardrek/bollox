@@ -148,9 +148,9 @@ impl Interpreter {
             let mut line = String::new();
             let stdin = io::stdin();
             stdin.lock().read_line(&mut line).unwrap();
+            let line = line.trim().to_string();
 
             Ok(Object::String(crate::object::StringKind::Dynamic(line)))
-            //~ todo!()
         }
 
         self.define_global_item("read", 0, read);
@@ -167,6 +167,19 @@ impl Interpreter {
         }
 
         self.define_global_item("to_string", 1, to_string);
+
+        fn test(
+            _interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let s = "string";
+
+            let b = Object::dynamic_string(s.to_string()) == Object::static_string(s);
+
+            Ok(Object::Boolean(b))
+        }
+
+        self.define_global_item("test", 0, test);
     }
 
     fn define_global_item(
@@ -259,9 +272,9 @@ impl Interpreter {
                     methods,
                 })));
 
-                method_environment.borrow_mut().define(&name, obj.clone());
+                method_environment.borrow_mut().define(name, obj.clone());
 
-                self.environment.borrow_mut().define(&name, obj);
+                self.environment.borrow_mut().define(name, obj);
 
                 Object::Nil
             }
@@ -687,7 +700,7 @@ impl Interpreter {
 
                 match obj {
                     Instance(instance) => match instance.borrow().get(name) {
-                        Some(o) => o.clone(),
+                        Some(o) => o,
                         None => match instance.borrow().class.get_method(name) {
                             Some(mut method) => {
                                 let new_env = Environment::new_inner(method.closure.clone());
@@ -782,7 +795,7 @@ impl Interpreter {
 
                 let new_env = Environment::new_inner(method.closure.clone());
 
-                new_env.borrow_mut().define(&this_name, this.clone());
+                new_env.borrow_mut().define(&this_name, this);
 
                 method.closure = new_env;
 

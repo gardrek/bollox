@@ -165,7 +165,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
     let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
 
-    let had_error = parser.errors.len() != 0;
+    let had_error = !parser.errors.is_empty();
 
     if had_error {
         for e in parser.errors {
