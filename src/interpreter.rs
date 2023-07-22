@@ -122,7 +122,7 @@ impl Interpreter {
     }
 
     pub fn init_global_environment(&mut self) {
-        fn clock_fn(
+        fn clock(
             _interpreter: &mut Interpreter,
             _args: Vec<Object>,
         ) -> Result<Object, ErrorOrReturn> {
@@ -137,7 +137,36 @@ impl Interpreter {
             ))
         }
 
-        self.define_global_item("clock", 0, clock_fn);
+        self.define_global_item("clock", 0, clock);
+
+        fn read(
+            _interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            use std::io::{self, BufRead};
+
+            let mut line = String::new();
+            let stdin = io::stdin();
+            stdin.lock().read_line(&mut line).unwrap();
+
+            Ok(Object::String(crate::object::StringKind::Dynamic(line)))
+            //~ todo!()
+        }
+
+        self.define_global_item("read", 0, read);
+
+        fn to_string(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let obj = &args[0];
+
+            let s = format!("{}", obj);
+
+            Ok(Object::dynamic_string(s))
+        }
+
+        self.define_global_item("to_string", 1, to_string);
     }
 
     fn define_global_item(

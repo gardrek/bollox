@@ -41,6 +41,10 @@ impl Object {
         }
     */
 
+    pub fn dynamic_string(s: String) -> Object {
+        Object::String(StringKind::Dynamic(s))
+    }
+
     pub fn new_instance(class: Rc<Class>) -> Object {
         Object::Instance(Rc::new(RefCell::new(Instance {
             class,
@@ -51,7 +55,7 @@ impl Object {
 
 #[derive(Debug, Clone)]
 pub enum StringKind {
-    //~ Dynamic(String),
+    Dynamic(String),
     Static(Sym),
     Cat(Box<StringKind>, Box<StringKind>),
 }
@@ -255,9 +259,9 @@ impl PartialEq for Object {
             (Number(a), Number(b)) => a == b,
             (String(a_kind), String(b_kind)) => match (a_kind, b_kind) {
                 (Static(a), Static(b)) => a == b,
-                //~ (Dynamic(a), Dynamic(b)) => a == b,
-                //~ (Dynamic(a), _) => a == &b_kind.to_string(),
-                //~ (_, Dynamic(b)) => &a_kind.to_string() == b,
+                (Dynamic(a), Dynamic(b)) => a == b,
+                (Dynamic(a), _) => a == &b_kind.to_string(),
+                (_, Dynamic(b)) => &a_kind.to_string() == b,
                 (Cat(_, _), Cat(_, _)) | (Cat(_, _), _) | (_, Cat(_, _)) => {
                     a_kind.to_string() == b_kind.to_string()
                 }
@@ -293,7 +297,7 @@ impl fmt::Display for StringKind {
                     let interner = INTERNER.read().unwrap();
                     interner.resolve(*sym).unwrap().into()
                 }
-                //~ Dynamic(s) => s.clone(),
+                Dynamic(s) => format!("{}", s),
                 Cat(a, b) => format!("{}{}", a, b),
             }
         )
