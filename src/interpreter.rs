@@ -137,8 +137,6 @@ impl Interpreter {
             ))
         }
 
-        self.define_global_item("clock", 0, clock);
-
         fn read(
             _interpreter: &mut Interpreter,
             _args: Vec<Object>,
@@ -153,8 +151,6 @@ impl Interpreter {
             Ok(Object::String(crate::object::StringKind::Dynamic(line)))
         }
 
-        self.define_global_item("read", 0, read);
-
         fn to_string(
             _interpreter: &mut Interpreter,
             args: Vec<Object>,
@@ -165,8 +161,6 @@ impl Interpreter {
 
             Ok(Object::dynamic_string(s))
         }
-
-        self.define_global_item("to_string", 1, to_string);
 
         fn to_number(
             _interpreter: &mut Interpreter,
@@ -184,8 +178,12 @@ impl Interpreter {
             })
         }
 
+        self.define_global_item("clock", 0, clock);
+        self.define_global_item("read", 0, read);
+        self.define_global_item("to_string", 1, to_string);
         self.define_global_item("to_number", 1, to_number);
 
+        /*
         fn test(
             _interpreter: &mut Interpreter,
             _args: Vec<Object>,
@@ -198,6 +196,7 @@ impl Interpreter {
         }
 
         self.define_global_item("test", 0, test);
+        */
     }
 
     fn define_global_item(
