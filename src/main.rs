@@ -161,7 +161,7 @@ fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Opt
     eprintln!();
     //~ */
 
-    let mut parser = Parser::new(tokens, compatibility_mode);
+    let mut parser = Parser::new(tokens);
     let statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();
@@ -189,7 +189,7 @@ fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Opt
         return Ok(None);
     }
 
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new(compatibility_mode);
 
     interpreter.init_global_environment();
 

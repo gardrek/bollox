@@ -12,7 +12,7 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
     bindings: HashMap<Sym, Object>,
@@ -20,6 +20,7 @@ pub struct Environment {
 
 #[derive(Default)]
 pub struct Interpreter {
+    compatibility_mode: bool,
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
 }
@@ -99,8 +100,11 @@ impl Environment {
 }
 
 impl Interpreter {
-    pub fn new() -> Interpreter {
-        Interpreter::default()
+    pub fn new(compatibility_mode: bool) -> Interpreter {
+        Interpreter {
+            compatibility_mode,
+            ..Interpreter::default()
+        }
     }
 
     fn get_binding(&self, sym: &Sym) -> Option<Object> {
@@ -280,6 +284,14 @@ impl Interpreter {
         );
     }
 
+    pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
+        if self.compatibility_mode {
+            Environment::new_inner(self.environment.clone())
+        } else {
+            self.environment.borrow().flat_copy()
+        }
+    }
+
     pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ErrorOrReturn> {
         use StmtKind::*;
         Ok(match &statement.kind {
@@ -294,7 +306,7 @@ impl Interpreter {
                 Object::Nil
             }
             Class(name, superclass_name, body) => {
-                let method_environment = self.environment.borrow().flat_copy();
+                let method_environment = self.create_closure();
 
                 let superclass = if let Some(superclass_name) = superclass_name {
                     let superclass = self
@@ -359,7 +371,7 @@ impl Interpreter {
             Expr(expr) => self.evaluate(expr)?,
             FunctionDeclaration(func) => {
                 let name = func.name;
-                let closure = self.environment.borrow().flat_copy();
+                let closure = self.create_closure();
 
                 let mut new_func = func.clone();
 

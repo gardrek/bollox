@@ -12,9 +12,9 @@
 
 # Differences compared to standard Lox #
 
-`if` and `while` statements have been made more Rust-like; you have to use brackets around the body, even if it's just one expression, but you don't have to use parenthesis around the condition.
+`if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 
-Closures make a copy of the environment rather than taking reference. Practically this is equivalent to captures being by-value instead of by-reference. Assignment no longer mutates the outer state. In order to mutate the outer state, you have to use an instance.
+Except in compatibility mode, closures make a copy of the environment rather than taking reference. Practically this is equivalent to captures being by-value instead of by-reference. Assignment no longer mutates the outer state. In order to mutate the outer state, you have to use an instance. This also eliminates the ability to use variables that haven't been declared yet when the function is declared.
 
 There is no static analysis pass, so some things that would have been compile-time errors are now runtime errors. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 

@@ -71,16 +71,14 @@ impl core::fmt::Display for ParseError {
 }
 
 pub struct Parser {
-    compatibility_mode: bool,
     tokens: Vec<Token>,
     cursor: usize,
     pub errors: Vec<ParseError>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>, compatibility_mode: bool) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
-            compatibility_mode,
             tokens,
             cursor: 0,
             errors: vec![],
@@ -585,7 +583,7 @@ impl Parser {
     }
 
     fn if_statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.compatibility_mode {
+        if self.check(&[TokenKind::LeftParen]) {
             self.c_style_if_statement()
         } else {
             self.rust_style_if_statement()
@@ -675,7 +673,7 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.compatibility_mode {
+        if self.check(&[TokenKind::LeftParen]) {
             self.c_style_while_statement()
         } else {
             self.rust_style_while_statement()
