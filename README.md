@@ -20,7 +20,7 @@ Many error messages are quite different. Errors are not currently in the best sh
 
 
 
-# Included Library Functions #
+## Included Library Functions ##
 
 `clock()` - returns the number of seconds since unix epoch
 
@@ -29,3 +29,7 @@ Many error messages are quite different. Errors are not currently in the best sh
 `to_string(value)` - returns a string representing whatever value is passed in
 
 `to_number(value)` - if the value is a number, returns it. if the value is a string which it can parse as a float, it returns the parsed number. otherwise, returns `nil`
+
+
+
+# () #

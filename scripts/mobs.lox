@@ -1,0 +1,119 @@
+var HEART_VALUE = 16;
+
+class ListNode {
+    init(value) {
+        this.value = value;
+        this.next = nil;
+    }
+}
+
+class List {
+    init() {
+        this.head = nil;
+    }
+
+    // Push value to the head of the list.
+    push(value) {
+        var node = ListNode(value);
+        if (this.head == nil) {
+            this.head = node;
+        } else {
+            node.next = this.head;
+            this.head = node;
+        }
+    }
+
+    // Call f(value) for each value in the list, from last value
+    // appended to first. If f returns a truthy value, stop iterating.
+    for_each(f) {
+        var node = this.head;
+        while (node != nil) {
+            if (f(node.value)) {
+                return;
+            }
+            node = node.next;
+        }
+    }
+
+    count() {
+        var count = 0;
+        var node = this.head;
+        while (node != nil) {
+            count = count + 1;
+            node = node.next;
+        }
+        return count;
+    }
+}
+
+class Mob {
+    init(name, max_health) {
+        this.name = name;
+        this.health = max_health;
+        this.max_health = max_health;
+    }
+
+    view() {
+        return "some sort of moving thing";
+    }
+
+    copy(name) {
+        var mob = Mob(name, this.max_health);
+        mob.health = this.health;
+        return mob;
+    }
+}
+
+class Slime < Mob {
+    init(name, color) {
+        super.init(name, 1 * HEART_VALUE);
+        this.color = color;
+    }
+
+    view() {
+        return "a large " + this.color + " blob of slime";
+    }
+
+    copy(name) {
+        var mob = Mob(name, this.max_health);
+        mob.health = this.health;
+        mob.color = this.color;
+        return mob;
+    }
+}
+
+class Archer < Mob {
+    init(name, range) {
+        super.init(name, 3 * HEART_VALUE);
+        this.range = range;
+    }
+
+    view() {
+        return "an archer with a " + this.range + " bow";
+    }
+
+    copy(name) {
+        var mob = Mob(name, this.max_health);
+        mob.health = this.health;
+        mob.range = this.range;
+        return mob;
+    }
+}
+
+var list = List();
+
+list.push(Slime("Bluey", "Blue"));
+list.push(Slime("Greeny", "Green"));
+list.push(Archer("Geraldine", "Long"));
+list.push(Archer("Sam", "Short"));
+list.push(Slime("Violet", "Perble"));
+list.push(Archer("Sherley", "Strange"));
+
+fun inspect(mob) {
+    print mob.name + " is " + mob.view() + " and " + to_string(mob.health / HEART_VALUE) + " hearts of health";
+}
+
+list.for_each(inspect);
+
+print to_string(list.count()) + " people ahead of us, Jimmy!";
+

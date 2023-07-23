@@ -1,0 +1,24 @@
+
+fun make_counter(n) {
+    var i = 0;
+    fun counter() {
+        i = i + 1;
+        if i <= n {
+            return i;
+        }
+    }
+    return counter;
+}
+
+var f = make_counter(5);
+
+var n = 10;
+
+var l = true;
+while l {
+    l = f();
+    if l {
+        print l;
+    }
+}
+

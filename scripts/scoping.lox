@@ -1,0 +1,33 @@
+
+var outside = "outside";
+var shadowed = "not shadowed?";
+var modified = "not modified?";
+var shadowed_and_modified = "original";
+
+print outside;
+print shadowed;
+print modified;
+print shadowed_and_modified;
+
+print "{";
+
+{
+    var inside = "inside";
+    var shadowed = "shadowed";
+    modified = "modified";
+    var shadowed_and_modified = "shadowed first";
+    shadowed_and_modified = "then modified";
+
+    print inside;
+    print outside;
+    print shadowed;
+    print modified;
+    print shadowed_and_modified;
+}
+
+print "}";
+
+print outside;
+print shadowed;
+print modified;
+print shadowed_and_modified;

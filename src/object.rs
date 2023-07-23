@@ -28,31 +28,31 @@ pub enum Object {
 }
 
 impl Object {
+    pub fn nil() -> Object {
+        Object::Nil
+    }
+
+    pub fn boolean(b: bool) -> Object {
+        Object::Boolean(b)
+    }
+
+    pub fn number(n: f64) -> Object {
+        Object::Number(n)
+    }
+
+    pub fn static_string(s: Sym) -> Object {
+        Object::String(StringKind::Static(s))
+    }
+
     /*
-        pub fn nil() -> Object {
-            Object::Nil
-        }
-
-        pub fn boolean(b: bool) -> Object {
-            Object::Boolean(b)
-        }
-
-        pub fn number(n: f64) -> Object {
-            Object::Number(n)
-        }
-
-        pub fn static_string(s: Sym) -> Object {
-            Object::String(StringKind::Static(s))
-        }
-    */
-
-    pub fn static_string(s: &'static str) -> Object {
+    pub fn static_string_from_str(s: &'static str) -> Object {
         let sym = {
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(s)
         };
         Object::String(StringKind::Static(sym))
     }
+    */
 
     pub fn dynamic_string(s: String) -> Object {
         Object::String(StringKind::Dynamic(s))
@@ -170,14 +170,13 @@ impl StringKind {
 
 impl Object {
     pub fn from_token(token: &Token) -> Option<Object> {
-        use Object::*;
         Some(match &token.kind {
-            TokenKind::Number(value) => Number(*value),
-            TokenKind::StaticString(sym) => String(StringKind::Static(*sym)),
+            TokenKind::Number(value) => Object::number(*value),
+            TokenKind::StaticString(sym) => Object::static_string(*sym),
             TokenKind::Reserved(word) => match word {
-                ReservedWord::True => Boolean(true),
-                ReservedWord::False => Boolean(false),
-                ReservedWord::Nil => Nil,
+                ReservedWord::True => Object::boolean(true),
+                ReservedWord::False => Object::boolean(false),
+                ReservedWord::Nil => Object::nil(),
                 _ => return None,
             },
             _ => return None,

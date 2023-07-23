@@ -1,0 +1,130 @@
+class ListNode {
+    init(value) {
+        this.value = value;
+        this.next = nil;
+    }
+}
+
+class List {
+    init() {
+        this.head = nil;
+    }
+
+    // Push value to the head of the list.
+    push(value) {
+        var node = ListNode(value);
+        if (this.head == nil) {
+            this.head = node;
+        } else {
+            node.next = this.head;
+            this.head = node;
+        }
+    }
+
+    // Pop value from the head of the list.
+    pop() {
+        if (this.head == nil) {
+            return nil;
+        } else {
+            var node = this.head;
+            this.head = this.head.next;
+            return node.value;
+        }
+    }
+
+    // Call f(value) for each value in the list, from last value
+    // appended to first. If f returns a truthy value, stop iterating.
+    for_each(f) {
+        var node = this.head;
+        while (node != nil) {
+            if (f(node.value)) {
+                return;
+            }
+            node = node.next;
+        }
+    }
+
+    accumulate(acc, f) {
+        var node = this.head;
+        while (node != nil) {
+            acc = f(acc, node.value);
+            node = node.next;
+        }
+        return acc;
+    }
+
+    count() {
+        var count = 0;
+        var node = this.head;
+        while (node != nil) {
+            count = count + 1;
+            node = node.next;
+        }
+        return count;
+    }
+}
+
+class DefaultStack < List {
+    init(default) {
+        this.default = default;
+        super.init();
+    }
+
+    pop() {
+        var val = super.pop();
+        if val {
+            return val;
+        } else {
+            return this.default;
+        }
+    }
+}
+
+var stack = DefaultStack(0);
+var input = "";
+var wait_for_input = true;
+
+fun concat_list(acc, v) {
+    return acc + to_string(v) + ", ";
+}
+
+fun print_stack(stack) {
+    print "[ " + stack.accumulate("", concat_list) + "]";
+}
+
+while wait_for_input {
+    input = read();
+    if (input == "quit") or (input == "q") or (input == "exit") {
+        wait_for_input = false;
+        print "quitting...";
+    } else if input != "" {
+        var number = to_number(input);
+        if number {
+            stack.push(number);
+        } else if input == "pop" {
+            var a = stack.pop();
+            print a;
+        } else if input == "dup" {
+            var a = stack.pop();
+            stack.push(a);
+            stack.push(a);
+        } else if input == "add" {
+            var b = stack.pop();
+            var a = stack.pop();
+            stack.push(a + b);
+        } else if input == "sub" {
+            var b = stack.pop();
+            var a = stack.pop();
+            stack.push(a - b);
+        } else if input == "mul" {
+            var b = stack.pop();
+            var a = stack.pop();
+            stack.push(a * b);
+        } else if input == "div" {
+            var b = stack.pop();
+            var a = stack.pop();
+            stack.push(a / b);
+        }
+        print_stack(stack);
+    }
+}

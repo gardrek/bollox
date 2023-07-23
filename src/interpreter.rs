@@ -190,7 +190,7 @@ impl Interpreter {
         ) -> Result<Object, ErrorOrReturn> {
             let s = "string";
 
-            let b = Object::dynamic_string(s.to_string()) == Object::static_string(s);
+            let b = Object::dynamic_string(s.to_string()) == Object::static_string_from_str(s);
 
             Ok(Object::Boolean(b))
         }

@@ -1,0 +1,13 @@
+
+var time = 0;
+while true {
+    var start = clock();
+
+    while clock() < start + 1 {
+        //print clock();
+    }
+
+    time = clock() / 1;
+
+    print time;
+}

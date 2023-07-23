@@ -1,0 +1,23 @@
+print "trüe stuff:";
+print false != true;
+print 10 > 1;
+print 12.0 == 12.000;
+print "" == "";
+print "E" == "E";
+print "AB" == "A" + "B";
+print "";
+print "false stuff:";
+print 1000 < 15;
+print 50 >= 60;
+print 70 <= 40;
+print "" == 0;
+print nil == false;
+print "";
+print "other stuff:";
+print 1 + 2 * 3;
+print 1 + (2 * 3);
+print (1 + 2) * 3;
+print (100 + 0.01898) / 100 * 17 - (18 + -34);
+print "ADSFASDFSADF";
+print "";
+/* There should be no evidence of this comment in the token stream /* /* */  */  /* */  /* /* */  */ */
