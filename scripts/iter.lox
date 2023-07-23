@@ -1,0 +1,41 @@
+
+fun range(start, exclusive_end) {
+    class RangeIter {
+        init() {
+            this.n = start;
+        }
+
+        next() {
+            if this.n >= exclusive_end {
+                return nil;
+            } else {
+                var next = this.n;
+                this.n = this.n + 1;
+                return next;
+            }
+        }
+    }
+
+    var i = RangeIter();
+
+    fun iter() {
+        return i.next();
+    }
+
+    return iter;
+}
+
+
+
+// for i in range(0, 16) { print i; }
+{
+    var f = range(0, 16);
+    var i = true;
+    while i {
+        i = f();
+        if i {
+            print i;
+        }
+    }
+}
+

@@ -434,6 +434,14 @@ impl Parser {
     }
 
     fn for_statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.check_advance(&[TokenKind::LeftParen]).is_some() {
+            self.c_style_for_statement()
+        } else {
+            self.iterator_for_statement()
+        }
+    }
+
+    fn c_style_for_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume_expected(&[TokenKind::LeftParen])?;
 
         let initializer = if self
@@ -450,14 +458,13 @@ impl Parser {
             Some(self.expression_statement()?)
         };
 
-        // TODO: if i had a "get location" function, i'd use it here to get the location for the
-        // default true condition
-
         let condition = if self.check(&[TokenKind::Op(Operator::Semicolon)]) {
             None
         } else {
             Some(self.expression()?)
         };
+
+        let condition_location = self.peek_previous().unwrap().location.clone();
 
         self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
@@ -482,7 +489,7 @@ impl Parser {
         let condition = match condition {
             Some(c) => c,
             None => Expr {
-                location: SourceLocation::bullshit(),
+                location: condition_location,
                 kind: ExprKind::Literal(Object::Boolean(true)),
             },
         };
@@ -493,6 +500,91 @@ impl Parser {
             Some(init) => Stmt::new(StmtKind::Block(vec![init, body])),
             None => body,
         })
+    }
+
+    fn iterator_for_statement(&mut self) -> Result<Stmt, ParseError> {
+        let counter_name = self.consume_identifier()?;
+
+        self.consume_expected(&[TokenKind::Reserved(ReservedWord::In)])?;
+
+        let iter_expr = self.expression()?;
+
+        let body = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+            Box::new(Stmt::new(StmtKind::Block(self.block()?)))
+        } else {
+            return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
+        };
+
+        let iter_name = {
+            let mut interner = crate::INTERNER.write().unwrap();
+            // use a keyword so as not to shadow any existing variable
+            // (except other for loops, which should be fine)
+            interner.get_or_intern("for")
+        };
+
+        let iter_declaration = Stmt::new(StmtKind::VariableDeclaration(iter_name, Some(iter_expr)));
+
+        let literal_true = Expr {
+            location: SourceLocation::bullshit(),
+            kind: ExprKind::Literal(Object::Boolean(true)),
+        };
+
+        let counter_declaration = Stmt::new(StmtKind::VariableDeclaration(
+            counter_name,
+            Some(literal_true),
+        ));
+
+        /*
+            for i in range(0, 16) { print i; }
+            ===>
+            {
+                var f = range(0, 16);
+                var i = true;
+                while i {
+                    i = f();
+                    if i {
+                        print i;
+                    }
+                }
+            }
+        */
+
+        let counter_function = Expr {
+            location: SourceLocation::bullshit(),
+            kind: ExprKind::VariableAccess(iter_name),
+        };
+
+        let counter_expr = Expr {
+            location: SourceLocation::bullshit(),
+            kind: ExprKind::Call(Box::new(counter_function), vec![]),
+        };
+
+        let counter_next = Stmt::new(StmtKind::Expr(Expr {
+            location: SourceLocation::bullshit(),
+            kind: ExprKind::Assign(counter_name, Box::new(counter_expr)),
+        }));
+
+        let condition = Expr {
+            location: SourceLocation::bullshit(),
+            kind: ExprKind::VariableAccess(counter_name),
+        };
+
+        let if_statement = Stmt::new(StmtKind::If(condition.clone(), body, None));
+
+        let while_body = Box::new(Stmt::new(StmtKind::Block(vec![
+            counter_next,
+            if_statement,
+        ])));
+
+        let while_loop = Stmt::new(StmtKind::While(condition, while_body));
+
+        //~ self.report(self.error(ParseErrorKind::eMaxArgumentsExceeded));
+
+        Ok(Stmt::new(StmtKind::Block(vec![
+            iter_declaration,
+            counter_declaration,
+            while_loop,
+        ])))
     }
 
     fn if_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -550,7 +642,10 @@ impl Parser {
             {
                 Some(Box::new(self.rust_style_if_statement()?))
             } else {
-                panic!()
+                return Err(self.error(ParseErrorKind::ExpectedToken(
+                    vec![TokenKind::LeftBrace, TokenKind::Reserved(ReservedWord::If)],
+                    self.peek().cloned(),
+                )));
             }
         } else {
             None

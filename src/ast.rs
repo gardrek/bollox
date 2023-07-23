@@ -80,7 +80,7 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
-            StmtKind::Class(name, _, _) => write!(f, "(class-stmt {:?})", name),
+            StmtKind::Class(name, _, _) => write!(f, "(class-stmt {})", crate::object::sym_to_str(name)),
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration(LoxFunction {
                 name,
@@ -88,11 +88,11 @@ impl fmt::Display for StmtKind {
                 body,
                 closure: _,
             }) => {
-                write!(f, "(fun-stmt {:?} (", name)?;
+                write!(f, "(fun-stmt {} (", crate::object::sym_to_str(name))?;
                 for p in parameters {
-                    write!(f, " {:?}", p)?;
+                    write!(f, " {}", crate::object::sym_to_str(p))?;
                 }
-                write!(f, ") ")?;
+                write!(f, " ) ")?;
                 for st in body {
                     write!(f, " {}", st)?;
                 }
@@ -105,8 +105,8 @@ impl fmt::Display for StmtKind {
             StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
             StmtKind::Return(expr) => write!(f, "(return-stmt {})", expr),
             StmtKind::VariableDeclaration(sym, expr) => match expr {
-                Some(e) => write!(f, "(var-stmt {:?} {})", sym, e),
-                None => write!(f, "(var-stmt {:?})", sym),
+                Some(e) => write!(f, "(var-stmt {} {})", crate::object::sym_to_str(sym), e),
+                None => write!(f, "(var-stmt {})", crate::object::sym_to_str(sym)),
             },
             StmtKind::While(cond, body) => write!(f, "(while-stmt {} {})", cond, body),
         }

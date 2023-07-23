@@ -11,7 +11,7 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
-fn sym_to_str(sym: &Sym) -> String {
+pub fn sym_to_str(sym: &Sym) -> String {
     let interner = INTERNER.read().unwrap();
     interner.resolve(*sym).unwrap().into()
 }
