@@ -11,6 +11,11 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
+fn sym_to_str(sym: &Sym) -> String {
+    let interner = INTERNER.read().unwrap();
+    interner.resolve(*sym).unwrap().into()
+}
+
 #[derive(Clone)]
 pub enum Object {
     Nil,
@@ -224,11 +229,6 @@ impl Object {
     */
 }
 
-fn sym_to_str(sym: &Sym) -> String {
-    let interner = INTERNER.read().unwrap();
-    interner.resolve(*sym).unwrap().into()
-}
-
 impl PartialEq for Callable {
     fn eq(&self, other: &Self) -> bool {
         use Callable::*;
@@ -250,7 +250,8 @@ impl PartialEq for Callable {
 
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        // here's a hacky way to not have to add another Rc
+        Rc::ptr_eq(&self.closure, &other.closure)
     }
 }
 

@@ -221,11 +221,6 @@ impl<'a> Scanner<'a> {
                     break;
                 }
             } else {
-                // FIXME: not sure if this worked before or not?
-                // as of now, an unfinished string hangs the lexer, unless the partial string is length 0
-                // actually this hang is not just unfinished strings, damn
-                //~ length += c.len_utf8();
-                //~ length += 1;
                 let location = SourceLocation::from_range(offset..(offset + length));
                 let token = Token {
                     location,
