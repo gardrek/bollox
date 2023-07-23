@@ -178,10 +178,69 @@ impl Interpreter {
             })
         }
 
+        fn getc(
+            _interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            use std::io::Read;
+            match std::io::stdin().bytes().next() {
+                Some(r) => match r {
+                    Ok(n) => Ok(Object::Number(n as f64)),
+                    Err(_e) => Ok(Object::Number(-1.0)),
+                },
+                None => Ok(Object::Number(-1.0)),
+            }
+        }
+
+        fn chr(_interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, ErrorOrReturn> {
+            let obj = &args[0];
+
+            Ok(match obj {
+                Object::Number(n) => {
+                    Object::dynamic_string(std::str::from_utf8(&[*n as u8]).unwrap().to_string())
+                }
+                _ => Object::Nil,
+            })
+        }
+
+        fn exit(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let _obj = &args[0];
+
+            panic!()
+        }
+
+        fn print_error(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let message = &args[0];
+
+            eprintln!("{}", message);
+
+            Ok(Object::Nil)
+        }
+
+        /*
+        `getc()` - Read a single character from stdin and return the character code as an integer.
+
+        `chr(ch)` - Convert given character code number to a single-character string.
+
+        `exit(status)` - Exit with given status code.
+
+        `print_error(message)` - Print message string on stderr.
+        */
+
         self.define_global_item("clock", 0, clock);
         self.define_global_item("read", 0, read);
         self.define_global_item("to_string", 1, to_string);
         self.define_global_item("to_number", 1, to_number);
+        self.define_global_item("getc", 0, getc);
+        self.define_global_item("chr", 1, chr);
+        self.define_global_item("exit", 1, exit);
+        self.define_global_item("print_error", 1, print_error);
 
         /*
         fn test(

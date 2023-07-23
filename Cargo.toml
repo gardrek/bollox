@@ -8,3 +8,7 @@ edition = "2021"
 source-span = "2.7.0"
 string-interner = "0.7.1"
 lazy_static = "1.4.0"
+
+[dependencies.clap]
+version = "4.3.19"
+features = ["derive"]

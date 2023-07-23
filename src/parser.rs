@@ -71,14 +71,16 @@ impl core::fmt::Display for ParseError {
 }
 
 pub struct Parser {
+    compatibility_mode: bool,
     tokens: Vec<Token>,
     cursor: usize,
     pub errors: Vec<ParseError>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, compatibility_mode: bool) -> Self {
         Self {
+            compatibility_mode,
             tokens,
             cursor: 0,
             errors: vec![],
@@ -494,10 +496,14 @@ impl Parser {
     }
 
     fn if_statement(&mut self) -> Result<Stmt, ParseError> {
-        self._rust_style_if_statement()
+        if self.compatibility_mode {
+            self.c_style_if_statement()
+        } else {
+            self.rust_style_if_statement()
+        }
     }
 
-    fn _c_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn c_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume_expected(&[TokenKind::LeftParen])?;
 
         let condition = self.expression()?;
@@ -518,7 +524,7 @@ impl Parser {
         Ok(Stmt::new(StmtKind::If(condition, then_branch, else_branch)))
     }
 
-    fn _rust_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn rust_style_if_statement(&mut self) -> Result<Stmt, ParseError> {
         let condition = self.expression()?;
 
         //~ /*
@@ -542,7 +548,7 @@ impl Parser {
                 .check_advance(&[TokenKind::Reserved(ReservedWord::If)])
                 .is_some()
             {
-                Some(Box::new(self._rust_style_if_statement()?))
+                Some(Box::new(self.rust_style_if_statement()?))
             } else {
                 panic!()
             }
@@ -577,10 +583,14 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
-        self._rust_style_while_statement()
+        if self.compatibility_mode {
+            self.c_style_while_statement()
+        } else {
+            self.rust_style_while_statement()
+        }
     }
 
-    fn _c_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn c_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume_expected(&[TokenKind::LeftParen])?;
 
         let condition = self.expression()?;
@@ -592,7 +602,7 @@ impl Parser {
         Ok(Stmt::new(StmtKind::While(condition, body)))
     }
 
-    fn _rust_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn rust_style_while_statement(&mut self) -> Result<Stmt, ParseError> {
         let condition = self.expression()?;
 
         let body = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {

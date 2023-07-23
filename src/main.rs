@@ -13,9 +13,7 @@ extern crate lazy_static;
 
 extern crate string_interner;
 
-use std::env;
 use std::fs;
-use std::path::Path;
 
 use std::io;
 use std::io::BufRead;
@@ -37,7 +35,7 @@ lazy_static! {
 
 type GenericResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-//mod interpreter;
+mod arg;
 mod ast;
 mod interpreter;
 mod object;
@@ -55,13 +53,16 @@ use scanner::Scanner;
 use source::SourceId;
 
 fn run() -> GenericResult {
-    let args: Vec<String> = env::args().collect();
+    let clargs = {
+        use clap::Parser;
+        arg::ArgStruct::parse()
+    };
 
     let mut stdout = io::BufWriter::new(io::stdout());
 
-    let result: std::result::Result<(), crate::result::Error> = match args.len() {
+    let result: std::result::Result<(), crate::result::Error> = match clargs.script {
         // If no arguments, run interactively
-        1 => {
+        None => {
             let mut stdin = io::BufReader::new(io::stdin());
             let mut next_source_id = 0;
             loop {
@@ -70,8 +71,8 @@ fn run() -> GenericResult {
                 let mut input = String::new();
                 stdin.read_line(&mut input)?;
                 next_source_id += 1;
-                match run_string(input, next_source_id) {
-                    Ok(Some(res)) => writeln!(stdout, "eyoooo? {}", res)?,
+                match run_string(input, next_source_id, clargs.compatibility) {
+                    Ok(Some(res)) => writeln!(stdout, "=> {}", res)?,
                     Ok(None) => (),
                     Err(res) => writeln!(stdout, "eyoooo {:?}", res)?,
                 }
@@ -80,10 +81,10 @@ fn run() -> GenericResult {
         }
 
         // If a filename is given, run it as a script
-        2 => {
-            let source = fs::read_to_string(Path::new(&args[1]))?;
+        Some(script) => {
+            let source = fs::read_to_string(script)?;
 
-            let result = run_string(source.clone(), 0);
+            let result = run_string(source.clone(), 0, clargs.compatibility);
 
             if let Err(e) = &result {
                 eprintln!(
@@ -99,8 +100,6 @@ fn run() -> GenericResult {
                 Err(e) => Err(e),
             }
         }
-
-        _ => Err(result::Error::Usage),
     };
 
     match result {
@@ -124,7 +123,7 @@ fn main() {
     }
 }
 
-fn run_string(source: String, id: usize) -> Result<Option<String>> {
+fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Option<String>> {
     // past me sure did this nonsense
     // FIXME: not sure why i am trying to do this at this point
     {
@@ -162,7 +161,7 @@ fn run_string(source: String, id: usize) -> Result<Option<String>> {
     eprintln!();
     //~ */
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new(tokens, compatibility_mode);
     let statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();
