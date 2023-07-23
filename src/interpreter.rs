@@ -37,8 +37,10 @@ impl Environment {
     }
 
     fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-        if self.bindings.contains_key(&sym) {
-            self.bindings.insert(sym, obj)
+        //~ if self.bindings.contains_key(&sym) {
+        //~     self.bindings.insert(sym, obj)
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(sym) {
+            Some(e.insert(obj))
         } else if let Some(enc) = &mut self.enclosing {
             enc.borrow_mut().assign(sym, obj)
         } else {

@@ -80,7 +80,9 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
-            StmtKind::Class(name, _, _) => write!(f, "(class-stmt {})", crate::object::sym_to_str(name)),
+            StmtKind::Class(name, _, _) => {
+                write!(f, "(class-stmt {})", crate::object::sym_to_str(name))
+            }
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration(LoxFunction {
                 name,

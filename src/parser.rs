@@ -434,7 +434,7 @@ impl Parser {
     }
 
     fn for_statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.check_advance(&[TokenKind::LeftParen]).is_some() {
+        if self.check(&[TokenKind::LeftParen]) {
             self.c_style_for_statement()
         } else {
             self.iterator_for_statement()
@@ -571,10 +571,7 @@ impl Parser {
 
         let if_statement = Stmt::new(StmtKind::If(condition.clone(), body, None));
 
-        let while_body = Box::new(Stmt::new(StmtKind::Block(vec![
-            counter_next,
-            if_statement,
-        ])));
+        let while_body = Box::new(Stmt::new(StmtKind::Block(vec![counter_next, if_statement])));
 
         let while_loop = Stmt::new(StmtKind::While(condition, while_body));
 

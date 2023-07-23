@@ -30,9 +30,7 @@ class List {
 
     // Pop value from the head of the list.
     pop() {
-        if (this.head == nil) {
-            return nil;
-        } else {
+        if this.head {
             var node = this.head;
             this.head = this.head.next;
             return node.value;
@@ -49,6 +47,26 @@ class List {
             }
             node = node.next;
         }
+    }
+
+    iter() {
+        var s = this;
+
+        class Iter {
+            init() {
+                this.node = s.head;
+            }
+
+            next() {
+                if this.node {
+                    var next = this.node.value;
+                    this.node = this.node.next;
+                    return next;
+                }
+            }
+        }
+
+        return Iter().next;
     }
 
     accumulate(acc, f) {

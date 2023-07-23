@@ -27,7 +27,8 @@ fun range(start, exclusive_end) {
 
 
 
-// for i in range(0, 16) { print i; }
+for i in range(0, 16) { print i; }
+/*
 {
     var f = range(0, 16);
     var i = true;
@@ -38,4 +39,4 @@ fun range(start, exclusive_end) {
         }
     }
 }
-
+*/
