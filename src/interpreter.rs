@@ -12,6 +12,104 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
+/*
+use std::collections::HashSet;
+
+trait EnvTrait {
+    fn define(&mut self, sym: &Sym, value: Object);
+    fn assign(&mut self, sym: &Sym, value: Object);
+    fn get(&self, sym: &Sym) -> Option<Object>;
+    fn is_defined(&self, sym: &Sym) -> bool;
+
+}
+
+impl EnvTrait for Environment {
+    fn define(&mut self, sym: &Sym, value: Object) {
+        self.define(sym, value);
+    }
+
+    fn assign(&mut self, sym: &Sym, value: Object) {
+        self.assign(*sym, value);
+    }
+
+    fn get(&self, sym: &Sym) -> Option<Object> {
+        self.get_by_sym(sym)
+    }
+
+    fn is_defined(&self, sym: &Sym) -> bool {
+        self.is_defined(sym)
+    }
+}
+
+impl EnvTrait for Closure {
+    fn define(&mut self, _sym: &Sym, _value: Object) {
+        panic!();
+    }
+
+    fn assign(&mut self, sym: &Sym, value: Object) {
+        if self.bindings.contains(sym) {
+            self.enclosing.borrow_mut().assign(sym, value)
+        }
+    }
+
+    fn get(&self, sym: &Sym) -> Option<Object> {
+        if self.bindings.contains(sym) {
+            self.enclosing.borrow().get(sym)
+        } else {
+            None
+        }
+    }
+
+    fn is_defined(&self, sym: &Sym) -> bool {
+        self.bindings.contains(sym)
+    }
+}
+
+impl EnvTrait for EnvOrClosure {
+    fn define(&mut self, sym: &Sym, value: Object) {
+        use EnvOrClosure::*;
+        match self {
+            Env(e) => EnvTrait::define(e, sym, value),
+            Clos(e) => EnvTrait::define(e, sym, value),
+        }
+    }
+
+    fn assign(&mut self, sym: &Sym, value: Object) {
+        use EnvOrClosure::*;
+        match self {
+            Env(e) => EnvTrait::assign(e, sym, value),
+            Clos(e) => EnvTrait::assign(e, sym, value),
+        }
+    }
+
+    fn get(&self, sym: &Sym) -> Option<Object> {
+        use EnvOrClosure::*;
+        match self {
+            Env(e) => EnvTrait::get(e, sym),
+            Clos(e) => EnvTrait::get(e, sym),
+        }
+    }
+
+    fn is_defined(&self, sym: &Sym) -> bool {
+        use EnvOrClosure::*;
+        match self {
+            Env(e) => EnvTrait::is_defined(e, sym),
+            Clos(e) => EnvTrait::is_defined(e, sym),
+        }
+    }
+}
+
+pub enum EnvOrClosure {
+    Env(Environment),
+    Clos(Closure),
+}
+
+pub struct Closure {
+    enclosing: Rc<RefCell<EnvOrClosure>>,
+    bindings: HashSet<Sym>,
+}
+*/
+
 #[derive(Debug, Default)]
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
@@ -213,9 +311,12 @@ impl Interpreter {
             _interpreter: &mut Interpreter,
             args: Vec<Object>,
         ) -> Result<Object, ErrorOrReturn> {
-            let _obj = &args[0];
+            let obj = &args[0];
 
-            panic!()
+            match obj {
+                Object::Number(n) => std::process::exit(*n as i32),
+                _ => std::process::exit(0),
+            }
         }
 
         fn print_error(
