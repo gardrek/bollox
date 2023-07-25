@@ -407,7 +407,10 @@ impl Interpreter {
                 Object::Nil
             }
             Break(expr) => {
-                return Err(ErrorOrReturn::Break(match expr { Some(e) => Some(self.evaluate(e)?), None => None }));
+                return Err(ErrorOrReturn::Break(match expr {
+                    Some(e) => Some(self.evaluate(e)?),
+                    None => None,
+                }));
             }
             Class(name, superclass_name, method_decls, associated_decls) => {
                 let method_environment = self.create_closure();
@@ -461,6 +464,25 @@ impl Interpreter {
                 }
 
                 let mut associated_functions = HashMap::default();
+
+                for stmt in associated_decls {
+                    let (name, func) = match &stmt.kind {
+                        StmtKind::FunctionDeclaration(name, func) => (name, func),
+                        _ => {
+                            return Err(RuntimeError::ice(
+                                "statement in class is not a method or associated function. bad syntax tree",
+                                SourceLocation::bullshit(),
+                            )
+                            .into());
+                        }
+                    };
+
+                    let mut new_func = func.clone();
+
+                    new_func.closure = method_environment.clone();
+
+                    associated_functions.insert(*name, new_func);
+                }
 
                 let obj = Object::Callable(Callable::Class(Rc::new(crate::object::Class {
                     name: *name,
@@ -516,8 +538,8 @@ impl Interpreter {
                     match self.interpret_statement(body) {
                         Ok(_) => (),
                         Err(e) => match e {
-                            ErrorOrReturn::RuntimeError(_) => return Err(e.into()),
-                            ErrorOrReturn::Return(_) => return Err(e.into()),
+                            ErrorOrReturn::RuntimeError(_) => return Err(e),
+                            ErrorOrReturn::Return(_) => return Err(e),
                             ErrorOrReturn::Break(_v) => break,
                         },
                     }
@@ -562,6 +584,23 @@ impl Interpreter {
         };
 
         (env, err)
+    }
+
+    pub fn call_object(
+        &mut self,
+        callee: &Object,
+        arguments: Vec<Object>,
+        location: SourceLocation,
+    ) -> Result<Object, ErrorOrReturn> {
+        match callee {
+            Object::Callable(c) => self.call(c, arguments)?,
+            _ => {
+                return Err(
+                    RuntimeError::type_error("Attempt to call uncallable type", location).into(),
+                );
+            }
+        };
+        todo!()
     }
 
     pub fn call(
@@ -636,7 +675,7 @@ impl Interpreter {
 
                     let mut new_func = func.clone();
 
-                    new_func.closure = closure.clone();
+                    new_func.closure = closure;
 
                     Object::Callable(crate::object::Callable::Lox(new_func))
                 }
@@ -757,6 +796,23 @@ impl Interpreter {
                             .into());
                         }
                     },
+                    Percent => match (left, right) {
+                        (Number(left_n), Number(right_n)) => Object::Number(left_n % right_n),
+                        (Number(_), _) => {
+                            return Err(RuntimeError::type_error(
+                                "Cannot modulo, second arg not a number",
+                                expr.location.clone(),
+                            )
+                            .into());
+                        }
+                        _ => {
+                            return Err(RuntimeError::type_error(
+                                "Cannot modulo, first arg not a number",
+                                expr.location.clone(),
+                            )
+                            .into());
+                        }
+                    }
                     Greater => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n > right_n),
                         (Number(_), _) => {
@@ -827,14 +883,7 @@ impl Interpreter {
                     },
                     BangEqual => Object::Boolean(left != right),
                     EqualEqual => Object::Boolean(left == right),
-                    Comma | Dot | Equal | Semicolon => {
-                        return Err(RuntimeError::unimplemented(
-                            "Unimplemented binary operator",
-                            expr.location.clone(),
-                        )
-                        .into());
-                    }
-                    Bang => {
+                    Comma | Dot | Equal | Semicolon | Bang | MinusEqual | PlusEqual | SlashEqual | StarEqual | PercentEqual => {
                         return Err(RuntimeError::ice(
                             "op is not a binary operator. bad syntax tree",
                             expr.location.clone(),
@@ -940,12 +989,17 @@ impl Interpreter {
                             }
                         },
                     },
-                    Callable(crate::object::Callable::Class(_class)) => {
-                        return Err(RuntimeError::type_error(
-                            "Cannot access property of class; not yet implemented",
-                            location,
-                        )
-                        .into())
+                    Callable(crate::object::Callable::Class(class)) => {
+                        match class.get_function(name) {
+                            Some(f) => Object::Callable(crate::object::Callable::Lox(f)),
+                            None => {
+                                return Err(RuntimeError::type_error(
+                                    "Cannot access nonexistent associated function",
+                                    location,
+                                )
+                                .into())
+                            }
+                        }
                     }
                     _ => {
                         return Err(RuntimeError::type_error(

@@ -355,10 +355,8 @@ impl<'a> Scanner<'a> {
                 '}' => break self.static_token(RightBrace, 1),
                 ',' => break self.static_token(Op(Comma), 1),
                 '.' => break self.static_token(Op(Dot), 1),
-                '-' => break self.static_token(Op(Minus), 1),
-                '+' => break self.static_token(Op(Plus), 1),
-                ';' => break self.static_token(Op(Semicolon), 1),
-                '*' => break self.static_token(Op(Star), 1),
+                '-' => break self.match_static_operator('=', MinusEqual, Minus, 1)?,
+                '+' => break self.match_static_operator('=', PlusEqual, Plus, 1)?,
                 '/' => match self.peek_char() {
                     // no bytes left
                     None => return Ok(self.do_eof()),
@@ -372,14 +370,20 @@ impl<'a> Scanner<'a> {
                             self.block_comment()?;
                             continue;
                         }
-
+                        '=' => {
+                            self.cursor += 1;
+                            break self.static_token(Op(SlashEqual), 1)
+                        }
                         _ => break self.static_token(Op(Slash), 1),
                     },
                 },
+                '*' => break self.match_static_operator('=', StarEqual, Star, 1)?,
+                '%' => break self.match_static_operator('=', PercentEqual, Percent, 1)?,
                 '!' => break self.match_static_operator('=', BangEqual, Bang, 1)?,
                 '=' => break self.match_static_operator('=', EqualEqual, Equal, 1)?,
                 '>' => break self.match_static_operator('=', GreaterEqual, Greater, 1)?,
                 '<' => break self.match_static_operator('=', LessEqual, Less, 1)?,
+                ';' => break self.static_token(Op(Semicolon), 1),
                 '"' => break self.string(),
                 ch if ch.is_whitespace() => {
                     continue;

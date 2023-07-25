@@ -327,8 +327,8 @@ impl Parser {
         let mut associated_funcs = vec![];
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
-            if let Some(_) = self.check_advance(&[TokenKind::Reserved(ReservedWord::Class)]) {
-                //
+            if self.check_advance(&[TokenKind::Reserved(ReservedWord::Class)]).is_some() {
+                associated_funcs.push(self.function_declaration()?);
             } else {
                 methods.push(self.function_declaration()?);
             }
@@ -336,7 +336,12 @@ impl Parser {
 
         self.consume_expected(&[TokenKind::RightBrace])?;
 
-        Ok(Stmt::new(StmtKind::Class(name, superclass, methods, associated_funcs)))
+        Ok(Stmt::new(StmtKind::Class(
+            name,
+            superclass,
+            methods,
+            associated_funcs,
+        )))
     }
 
     fn function_declaration(&mut self) -> Result<Stmt, ParseError> {
@@ -415,17 +420,19 @@ impl Parser {
             TokenKind::Reserved(ReservedWord::If),
             TokenKind::Reserved(ReservedWord::Print),
             TokenKind::Reserved(ReservedWord::Return),
+            TokenKind::Reserved(ReservedWord::Switch),
             TokenKind::Reserved(ReservedWord::While),
         ]) {
             return match &token.kind {
                 TokenKind::Reserved(word) => {
                     use ReservedWord::*;
                     match word {
-                        For => self.for_statement(),
                         Break => self.break_statement(),
+                        For => self.for_statement(),
                         If => self.if_statement(),
                         Print => self.print_statement(),
                         Return => self.return_statement(),
+                        Switch => self.switch_statement(),
                         While => self.while_statement(),
                         _ => unreachable!(),
                     }
@@ -441,18 +448,18 @@ impl Parser {
         self.expression_statement()
     }
 
+    fn break_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
+
+        Ok(Stmt::new(StmtKind::Break(None)))
+    }
+
     fn for_statement(&mut self) -> Result<Stmt, ParseError> {
         if self.check(&[TokenKind::LeftParen]) {
             self.c_style_for_statement()
         } else {
             self.iterator_for_statement()
         }
-    }
-
-    fn break_statement(&mut self) -> Result<Stmt, ParseError> {
-        self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
-
-        Ok(Stmt::new(StmtKind::Break(None)))
     }
 
     fn c_style_for_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -548,21 +555,6 @@ impl Parser {
             Some(literal_true),
         ));
 
-        /*
-            for i in range(0, 16) { print i; }
-            ===>
-            {
-                var f = range(0, 16);
-                var i = true;
-                while i {
-                    i = f();
-                    if i {
-                        print i;
-                    }
-                }
-            }
-        */
-
         let counter_function = Expr {
             location: SourceLocation::bullshit(),
             kind: ExprKind::VariableAccess(iter_name),
@@ -588,8 +580,6 @@ impl Parser {
         let while_body = Box::new(Stmt::new(StmtKind::Block(vec![counter_next, if_statement])));
 
         let while_loop = Stmt::new(StmtKind::While(condition, while_body));
-
-        //~ self.report(self.error(ParseErrorKind::eMaxArgumentsExceeded));
 
         Ok(Stmt::new(StmtKind::Block(vec![
             iter_declaration,
@@ -624,10 +614,13 @@ impl Parser {
             {
                 Some(Box::new(self.if_statement()?))
             } else {
+                Some(Box::new(self.statement()?))
+                /*
                 return Err(self.error(ParseErrorKind::ExpectedToken(
                     vec![TokenKind::LeftBrace, TokenKind::Reserved(ReservedWord::If)],
                     self.peek().cloned(),
                 )));
+                */
             }
         } else {
             None
@@ -657,6 +650,74 @@ impl Parser {
         self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
         Ok(Stmt::new(StmtKind::Return(expr)))
+    }
+
+    fn switch_statement(&mut self) -> Result<Stmt, ParseError> {
+        let subject = self.expression()?;
+
+        if self.check_advance(&[TokenKind::LeftBrace]).is_none() {
+            return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
+        }
+
+        let mut cases = vec![];
+
+        while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
+            let mut branch = self.if_statement()?;
+
+            match branch.kind {
+                StmtKind::If(conditional, then_branch, else_branch) => {
+                    branch = Stmt::new(StmtKind::If(
+                        Expr {
+                            location: conditional.location.clone(),
+                            kind: ExprKind::Binary(
+                                Box::new(subject.clone()),
+                                Operator::EqualEqual,
+                                Box::new(conditional.clone()),
+                            ),
+                        },
+                        then_branch,
+                        else_branch.clone(),
+                    ));
+
+                    if else_branch.is_some() {
+                        cases.push(branch);
+                        break;
+                    }
+                },
+                _ => unreachable!(),
+            }
+
+            cases.push(branch);
+        }
+
+        let mut body: Option<Stmt> = None;
+
+        while !cases.is_empty() {
+            let branch = cases.pop().unwrap();
+
+            match body {
+                Some(previous_branch) => {
+                    match branch.kind {
+                        StmtKind::If(conditional, then_branch, _) => {
+                            body = Some(Stmt::new(StmtKind::If(
+                                conditional,
+                                then_branch,
+                                Some(Box::new(previous_branch)),
+                            )));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                None => body = Some(branch),
+            }
+        }
+
+        self.consume_expected(&[TokenKind::RightBrace])?;
+
+        match body {
+            Some(b) => Ok(b),
+            None => Err(self.error(ParseErrorKind::MaxArgumentsExceeded)),
+        }
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -700,20 +761,39 @@ impl Parser {
     fn assignment(&mut self) -> Result<Expr, ParseError> {
         let expr = self.logical_or()?;
 
-        if self
-            .check_advance(&[TokenKind::Op(Operator::Equal)])
-            .is_some()
+        if let Some(op_token) = self
+            .check_advance(&[
+                TokenKind::Op(Operator::Equal),
+                TokenKind::Op(Operator::MinusEqual),
+                TokenKind::Op(Operator::PlusEqual),
+                TokenKind::Op(Operator::SlashEqual),
+                TokenKind::Op(Operator::StarEqual),
+                TokenKind::Op(Operator::PercentEqual),
+            ])
         {
-            let value = self.assignment();
+            let token = op_token.clone();
+
+            let value = Box::new(self.assignment()?);
+
+            let r_expr = match &token.kind {
+                TokenKind::Op(op) => match op {
+                    Operator::Equal => value,
+                    a => Box::new(Expr {
+                        location: expr.location.clone(),
+                        kind: ExprKind::Binary(Box::new(expr.clone()), a.binary_from_combined(), value),
+                    }),
+                }
+                _ => unreachable!(),
+            };
 
             return Ok(match expr.kind {
                 ExprKind::VariableAccess(name) => Expr {
                     location: expr.location,
-                    kind: ExprKind::Assign(name, Box::new(value?)),
+                    kind: ExprKind::Assign(name, r_expr),
                 },
                 ExprKind::PropertyAccess(obj, name) => Expr {
                     location: expr.location,
-                    kind: ExprKind::PropertyAssign(obj, name, Box::new(value?)),
+                    kind: ExprKind::PropertyAssign(obj, name, r_expr),
                 },
 
                 // TODO: Can we report and synchronize here?
@@ -796,6 +876,7 @@ impl Parser {
             &[
                 TokenKind::Op(Operator::Slash),
                 TokenKind::Op(Operator::Star),
+                TokenKind::Op(Operator::Percent),
             ],
         )
     }

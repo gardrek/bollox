@@ -18,8 +18,12 @@ Except in compatibility mode, closures make a copy of the environment rather tha
 
 There is no static analysis pass, so some things that would have been compile-time errors are now runtime errors. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 
+Modulo operator `a % b`
+
+Combined operator syntax. e.g. `a += b`
+
 I've added an iterator syntax to `for` loops. This is essentially syntactic sugar that breaks down like this:
-```
+```js
 for i in [iter] { [body] }
 ==>
 {
@@ -34,11 +38,47 @@ for i in [iter] { [body] }
 }
 ```
 
+Switch statement syntax: It's just sugar for a chain of `if ... else` and it behaves much the same. Each case works just like an if statement without the if, and the default case is handled by `else`.
+```js
+switch input {
+    "dup" {
+        var a = stack.pop();
+        stack.push(a);
+        stack.push(a);
+    }
+    ("pop") stack.pop();
+    "add" {
+        var b = stack.pop();
+        var a = stack.pop();
+        stack.push(a + b);
+    }
+    else print_stack(stack);
+}
+
+==>
+
+if input == "dup" {
+    var a = stack.pop();
+    stack.push(a);
+    stack.push(a);
+} else if (input == "pop")
+    stack.pop();
+else if input == "add" {
+    var b = stack.pop();
+    var a = stack.pop();
+    stack.push(a + b);
+} else
+    print_stack(stack);
+```
+
+
 ## Book Challenge Extensions ##
 
-Supports anonymous functions with the syntax `fun(...) { ... }`.
+Supports:
+- anonymous functions with the syntax `fun(...) { ... }`.
+- break statements with simple `break;` syntax.
+- associated functions on classes with `class func_name(...) {...}` and `ClassName.func_name(...)`
 
-break statements with simple `break;` syntax.
 
 
 

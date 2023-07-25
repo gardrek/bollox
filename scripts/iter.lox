@@ -1,12 +1,11 @@
 fun range(i, n) {
-    var counter = fun () {
+    return fun() {
         if i < n {
             var out = i;
             i = i + 1;
             return out;
         }
     };
-    return counter;
 }
 
 fun range_inclusive(i, n) {

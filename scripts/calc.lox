@@ -10,10 +10,16 @@ class List {
         this.head = nil;
     }
 
+    class new_with_head(value) {
+        var l = List();
+        l.push(value);
+        return l;
+    }
+
     // Push value to the head of the list.
     push(value) {
         var node = ListNode(value);
-        if (this.head == nil) {
+        if this.head == nil {
             this.head = node;
         } else {
             node.next = this.head;
@@ -23,44 +29,57 @@ class List {
 
     // Pop value from the head of the list.
     pop() {
-        if (this.head == nil) {
-            return nil;
-        } else {
+        if this.head {
             var node = this.head;
             this.head = this.head.next;
             return node.value;
         }
     }
 
-    // Call f(value) for each value in the list, from last value
-    // appended to first. If f returns a truthy value, stop iterating.
-    for_each(f) {
+    iter_nodes() {
         var node = this.head;
-        while (node != nil) {
-            if (f(node.value)) {
-                return;
+        return fun() {
+            if node {
+                var next = node;
+                node = node.next;
+                return next;
             }
-            node = node.next;
+        };
+    }
+
+    iter() {
+        var node = this.head;
+        return fun() {
+            if node {
+                var next = node.value;
+                node = node.next;
+                return next;
+            }
+        };
+    }
+
+    // Call f(value) for each value in the list, from last value appended to first.
+    // If f returns a truthy value, stop iterating and return that value.
+    for_each(f) {
+        for value in this.iter() {
+            var r = f(value);
+            if r {
+                return r;
+            }
         }
     }
 
     accumulate(acc, f) {
-        var node = this.head;
-        while (node != nil) {
-            acc = f(acc, node.value);
-            node = node.next;
+        for value in this.iter() {
+            acc = f(acc, value);
         }
         return acc;
     }
 
     count() {
-        var count = 0;
-        var node = this.head;
-        while (node != nil) {
+        return accumulate(0, fun(count, _value) {
             count = count + 1;
-            node = node.next;
-        }
-        return count;
+        });
     }
 }
 
@@ -101,29 +120,42 @@ while wait_for_input {
         var number = to_number(input);
         if number {
             stack.push(number);
-        } else if input == "pop" {
-            var a = stack.pop();
-            print a;
-        } else if input == "dup" {
-            var a = stack.pop();
-            stack.push(a);
-            stack.push(a);
-        } else if input == "add" {
-            var b = stack.pop();
-            var a = stack.pop();
-            stack.push(a + b);
-        } else if input == "sub" {
-            var b = stack.pop();
-            var a = stack.pop();
-            stack.push(a - b);
-        } else if input == "mul" {
-            var b = stack.pop();
-            var a = stack.pop();
-            stack.push(a * b);
-        } else if input == "div" {
-            var b = stack.pop();
-            var a = stack.pop();
-            stack.push(a / b);
+        } else switch input {
+            "pop" {
+                var a = stack.pop();
+                print a;
+            }
+            "dup" {
+                var a = stack.pop();
+                stack.push(a);
+                stack.push(a);
+            }
+            "swap" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(b);
+                stack.push(a);
+            }
+            "add" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(a + b);
+            }
+            "sub" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(a - b);
+            }
+            "mul" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(a * b);
+            }
+            "div" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(a / b);
+            }
         }
         print_stack(stack);
     }

@@ -37,9 +37,9 @@ pub enum Operator {
     Dot,
     Minus,
     Plus,
-    Semicolon,
     Slash,
     Star,
+    Percent,
     Bang,
     BangEqual,
     Equal,
@@ -48,6 +48,12 @@ pub enum Operator {
     GreaterEqual,
     Less,
     LessEqual,
+    Semicolon,
+    MinusEqual,
+    PlusEqual,
+    SlashEqual,
+    StarEqual,
+    PercentEqual,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +72,7 @@ pub enum ReservedWord {
     Print,
     Return,
     Super,
+    Switch,
     This,
     True,
     Var,
@@ -167,6 +174,7 @@ pub fn reserved_word_as_string(s: &ReservedWord) -> &'static str {
         Print => "print",
         Return => "return",
         Super => "super",
+        Switch => "switch",
         This => "this",
         True => "true",
         Var => "var",
@@ -191,6 +199,7 @@ pub fn string_as_reserved_word(s: &str) -> Option<ReservedWord> {
         "print" => Print,
         "return" => Return,
         "super" => Super,
+        "switch" => Switch,
         "this" => This,
         "true" => True,
         "var" => Var,
@@ -206,9 +215,9 @@ pub fn operator_as_string(s: &Operator) -> &'static str {
         Dot => ".",
         Minus => "-",
         Plus => "+",
-        Semicolon => ";",
         Slash => "/",
         Star => "*",
+        Percent => "%",
         Bang => "!",
         BangEqual => "!=",
         Equal => "=",
@@ -217,6 +226,26 @@ pub fn operator_as_string(s: &Operator) -> &'static str {
         GreaterEqual => ">=",
         Less => "<",
         LessEqual => "<=",
+        Semicolon => ";",
+        MinusEqual => "-=",
+        PlusEqual => "+=",
+        SlashEqual => "/=",
+        StarEqual => "*=",
+        PercentEqual => "%=",
+    }
+}
+
+impl Operator {
+    pub fn binary_from_combined(&self) -> Operator {
+        use Operator::*;
+        match self {
+            MinusEqual => Minus,
+            PlusEqual => Plus,
+            SlashEqual => Slash,
+            StarEqual => Star,
+            PercentEqual => Percent,
+            a => panic!("{:?}", a),
+        }
     }
 }
 

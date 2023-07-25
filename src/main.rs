@@ -167,6 +167,7 @@ fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Opt
     let had_error = !parser.errors.is_empty();
 
     if had_error {
+    //~ if true {
         for e in parser.errors {
             eprintln!(
                 "error on line {:?}: {}",

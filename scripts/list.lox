@@ -10,7 +10,7 @@ class List {
         this.head = nil;
     }
 
-    new_with_head(value) {
+    class new_with_head(value) {
         var l = List();
         l.push(value);
         return l;
@@ -19,14 +19,13 @@ class List {
     // Push value to the head of the list.
     push(value) {
         var node = ListNode(value);
-        if (this.head == nil) {
+        if this.head == nil {
             this.head = node;
         } else {
             node.next = this.head;
             this.head = node;
         }
     }
-
 
     // Pop value from the head of the list.
     pop() {
@@ -37,55 +36,50 @@ class List {
         }
     }
 
-    // Call f(value) for each value in the list, from last value
-    // appended to first. If f returns a truthy value, stop iterating.
-    for_each(f) {
+    iter_nodes() {
         var node = this.head;
-        while (node != nil) {
-            if (f(node.value)) {
-                return;
+        return fun() {
+            if node {
+                var next = node;
+                node = node.next;
+                return next;
             }
-            node = node.next;
-        }
+        };
     }
 
     iter() {
-        var s = this;
-
-        class Iter {
-            init() {
-                this.node = s.head;
+        var node = this.head;
+        return fun() {
+            if node {
+                var next = node.value;
+                node = node.next;
+                return next;
             }
+        };
+    }
 
-            next() {
-                if this.node {
-                    var next = this.node.value;
-                    this.node = this.node.next;
-                    return next;
-                }
+    // Call f(value) for each value in the list, from last value appended to first.
+    // If f returns a truthy value, stop iterating and return that value.
+    for_each(f) {
+        for value in this.iter() {
+            var r = f(value);
+            if r {
+                return r;
             }
         }
-
-        return Iter().next;
     }
 
     accumulate(acc, f) {
-        var node = this.head;
-        while (node != nil) {
-            acc = f(acc, node.value);
-            node = node.next;
+        for value in this.iter() {
+            acc = f(acc, value);
         }
         return acc;
     }
 
     count() {
-        var count = 0;
-        var node = this.head;
-        while (node != nil) {
+        return accumulate(0, fun(count, _value) {
             count = count + 1;
-            node = node.next;
-        }
-        return count;
+        });
     }
 }
 

@@ -104,6 +104,22 @@ impl Class {
             }
         }
     }
+
+    pub fn get_function(&self, name: &Sym) -> Option<LoxFunction> {
+        match self.associated_functions.get(name) {
+            Some(f) => {
+                let f = f.clone();
+                Some(f)
+            }
+            None => {
+                if let Some(superclass) = &self.superclass {
+                    superclass.get_function(name)
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
