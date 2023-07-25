@@ -1,33 +1,27 @@
-
-fun range(start, exclusive_end) {
-    class RangeIter {
-        init() {
-            this.n = start;
+fun range(i, n) {
+    var counter = fun () {
+        if i < n {
+            var out = i;
+            i = i + 1;
+            return out;
         }
-
-        next() {
-            if this.n >= exclusive_end {
-                return nil;
-            } else {
-                var next = this.n;
-                this.n = this.n + 1;
-                return next;
-            }
-        }
-    }
-
-    var i = RangeIter();
-
-    fun iter() {
-        return i.next();
-    }
-
-    return iter;
+    };
+    return counter;
 }
 
+fun range_inclusive(i, n) {
+    fun counter() {
+        if i <= n {
+            var out = i;
+            i = i + 1;
+            return out;
+        }
+    }
+    return counter;
+}
 
-
-for i in range(0, 16) { print i; }
+for i in range(0, 8) { print i; }
+for i in range_inclusive(1, 8) { print i; }
 /*
 {
     var f = range(0, 16);

@@ -94,7 +94,7 @@ fun print_stack(stack) {
 
 while wait_for_input {
     input = read();
-    if (input == "quit") or (input == "q") or (input == "exit") {
+    if ((input == "quit") or (input == "q") or (input == "exit")) {
         wait_for_input = false;
         print "quitting...";
     } else if input != "" {

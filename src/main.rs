@@ -198,6 +198,7 @@ fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Opt
         Err(eor) => match eor {
             ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
             ErrorOrReturn::Return(v) => v,
+            ErrorOrReturn::Break(_v) => todo!(),
         },
     };
 

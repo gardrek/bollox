@@ -110,7 +110,7 @@ list.push(Slime("Violet", "Perble"));
 list.push(Archer("Sherley", "Strange"));
 
 fun inspect(mob) {
-    print mob.name + " is " + mob.view() + " and " + to_string(mob.health / HEART_VALUE) + " hearts of health";
+    print mob.name + " is " + mob.view() + ", and has " + to_string(mob.health / HEART_VALUE) + " hearts of health";
 }
 
 list.for_each(inspect);

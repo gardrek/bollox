@@ -19,9 +19,10 @@ impl Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Block(Vec<Stmt>),
-    Class(Sym, Option<Sym>, Vec<Stmt>),
+    Break(Option<Expr>),
+    Class(Sym, Option<Sym>, Vec<Stmt>, Vec<Stmt>),
     Expr(Expr),
-    FunctionDeclaration(LoxFunction),
+    FunctionDeclaration(Sym, LoxFunction),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr),
@@ -80,16 +81,22 @@ impl fmt::Display for StmtKind {
                 }
                 write!(f, ")")
             }
-            StmtKind::Class(name, _, _) => {
+            StmtKind::Break(expr) => match expr {
+                Some(e) => write!(f, "(break-stmt {})", e),
+                None => write!(f, "(break-stmt)"),
+            },
+            StmtKind::Class(name, _, _, _) => {
                 write!(f, "(class-stmt {})", crate::object::sym_to_str(name))
             }
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
-            StmtKind::FunctionDeclaration(LoxFunction {
+            StmtKind::FunctionDeclaration(
                 name,
-                parameters,
-                body,
-                closure: _,
-            }) => {
+                LoxFunction {
+                    parameters,
+                    body,
+                    closure: _,
+                },
+            ) => {
                 write!(f, "(fun-stmt {} (", crate::object::sym_to_str(name))?;
                 for p in parameters {
                     write!(f, " {}", crate::object::sym_to_str(p))?;

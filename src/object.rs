@@ -85,6 +85,7 @@ pub struct Class {
     pub name: Sym,
     pub superclass: Option<Rc<Class>>,
     pub methods: HashMap<Sym, LoxFunction>,
+    pub associated_functions: HashMap<Sym, LoxFunction>,
 }
 
 impl Class {
@@ -123,7 +124,6 @@ impl Instance {
 
 #[derive(Debug, Clone)]
 pub struct LoxFunction {
-    pub name: Sym,
     pub parameters: Vec<Sym>,
     pub body: Vec<crate::ast::Stmt>,
     pub closure: Rc<RefCell<Environment>>,
@@ -328,7 +328,7 @@ impl fmt::Display for Callable {
         use Callable::*;
         match self {
             Native(func) => write!(f, "[built-in fun {}]", func.name),
-            Lox(func) => write!(f, "[fun {}]", sym_to_str(&func.name)),
+            Lox(_func) => write!(f, "[fun]"),
             Class(c) => write!(f, "[class {}]", c),
         }
     }

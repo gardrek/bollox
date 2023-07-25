@@ -406,7 +406,10 @@ impl Interpreter {
                 }
                 Object::Nil
             }
-            Class(name, superclass_name, body) => {
+            Break(expr) => {
+                return Err(ErrorOrReturn::Break(match expr { Some(e) => Some(self.evaluate(e)?), None => None }));
+            }
+            Class(name, superclass_name, method_decls, associated_decls) => {
                 let method_environment = self.create_closure();
 
                 let superclass = if let Some(superclass_name) = superclass_name {
@@ -438,12 +441,12 @@ impl Interpreter {
 
                 let mut methods = HashMap::default();
 
-                for stmt in body {
-                    let func = match &stmt.kind {
-                        StmtKind::FunctionDeclaration(func) => func,
+                for stmt in method_decls {
+                    let (name, func) = match &stmt.kind {
+                        StmtKind::FunctionDeclaration(name, func) => (name, func),
                         _ => {
                             return Err(RuntimeError::ice(
-                                "statement in class is not a method. bad syntax tree",
+                                "statement in class is not a method or associated function. bad syntax tree",
                                 SourceLocation::bullshit(),
                             )
                             .into());
@@ -454,13 +457,16 @@ impl Interpreter {
 
                     new_func.closure = method_environment.clone();
 
-                    methods.insert(func.name, new_func);
+                    methods.insert(*name, new_func);
                 }
+
+                let mut associated_functions = HashMap::default();
 
                 let obj = Object::Callable(Callable::Class(Rc::new(crate::object::Class {
                     name: *name,
                     superclass,
                     methods,
+                    associated_functions,
                 })));
 
                 method_environment.borrow_mut().define(name, obj.clone());
@@ -470,8 +476,7 @@ impl Interpreter {
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
-            FunctionDeclaration(func) => {
-                let name = func.name;
+            FunctionDeclaration(name, func) => {
                 let closure = self.create_closure();
 
                 let mut new_func = func.clone();
@@ -479,8 +484,8 @@ impl Interpreter {
                 new_func.closure = closure.clone();
 
                 let obj = Object::Callable(Callable::Lox(new_func));
-                closure.borrow_mut().define(&name, obj.clone());
-                self.environment.borrow_mut().define(&name, obj);
+                closure.borrow_mut().define(name, obj.clone());
+                self.environment.borrow_mut().define(name, obj);
                 Object::Nil
             }
             If(cond, then_block, else_block) => {
@@ -508,7 +513,14 @@ impl Interpreter {
             }
             While(cond, body) => {
                 while self.evaluate(cond)?.is_truthy() {
-                    self.interpret_statement(body)?;
+                    match self.interpret_statement(body) {
+                        Ok(_) => (),
+                        Err(e) => match e {
+                            ErrorOrReturn::RuntimeError(_) => return Err(e.into()),
+                            ErrorOrReturn::Return(_) => return Err(e.into()),
+                            ErrorOrReturn::Break(_v) => break,
+                        },
+                    }
                 }
                 Object::Nil
             }
@@ -582,6 +594,7 @@ impl Interpreter {
                     Err(eor) => match eor {
                         ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
                         ErrorOrReturn::Return(v) => v,
+                        ErrorOrReturn::Break(_v) => todo!(),
                     },
                 })
             }
@@ -617,7 +630,18 @@ impl Interpreter {
         use Object::*;
         use Operator::*;
         Ok(match &expr.kind {
-            Literal(literal) => literal.clone(),
+            Literal(literal) => match literal {
+                Callable(crate::object::Callable::Lox(func)) => {
+                    let closure = self.create_closure();
+
+                    let mut new_func = func.clone();
+
+                    new_func.closure = closure.clone();
+
+                    Object::Callable(crate::object::Callable::Lox(new_func))
+                }
+                _ => literal.clone(),
+            },
             Unary(operator, operand_expr) => {
                 let operand = self.evaluate(operand_expr)?;
                 match operator {
@@ -916,9 +940,16 @@ impl Interpreter {
                             }
                         },
                     },
+                    Callable(crate::object::Callable::Class(_class)) => {
+                        return Err(RuntimeError::type_error(
+                            "Cannot access property of class; not yet implemented",
+                            location,
+                        )
+                        .into())
+                    }
                     _ => {
                         return Err(RuntimeError::type_error(
-                            "Cannot access property, not an instance",
+                            "Cannot access property, not an instance or class",
                             location,
                         )
                         .into())
@@ -1011,10 +1042,10 @@ pub enum RuntimeErrorKind {
     UndefinedVariable,
 }
 
-#[derive(Debug, Clone)]
 pub enum ErrorOrReturn {
     RuntimeError(RuntimeError),
     Return(Object),
+    Break(Option<Object>),
 }
 
 impl From<RuntimeError> for ErrorOrReturn {

@@ -1,23 +1,19 @@
-
-fun make_counter(n) {
-    var i = 0;
+fun range(i, n) {
     fun counter() {
-        i = i + 1;
-        if i <= n {
-            return i;
+        if (i < n) {
+            var out = i;
+            i = i + 1;
+            return out;
         }
     }
     return counter;
 }
 
-var f = make_counter(5);
-
-var n = 10;
-
+var f = range(5, 10);
 var l = true;
-while l {
+while (l) {
     l = f();
-    if l {
+    if (l) {
         print l;
     }
 }

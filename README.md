@@ -12,9 +12,9 @@
 
 # Differences compared to standard Lox #
 
-`if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
+`if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition. For compatibility reasons, if the condition begins with parenthesis, you may have to put extra parenthesis around it.
 
-Except in compatibility mode, closures make a copy of the environment rather than taking reference. Practically this is equivalent to captures being by-value instead of by-reference. Assignment no longer mutates the outer state. In order to mutate the outer state, you have to use an instance. This also eliminates the ability to use variables that haven't been declared yet when the function is declared.
+Except in compatibility mode, closures make a copy of the environment rather than taking reference. This eliminates the ability to use variables that haven't been declared yet when the function is declared.
 
 There is no static analysis pass, so some things that would have been compile-time errors are now runtime errors. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 
@@ -33,6 +33,12 @@ for i in [iter] { [body] }
     }
 }
 ```
+
+## Book Challenge Extensions ##
+
+Supports anonymous functions with the syntax `fun(...) { ... }`.
+
+break statements with simple `break;` syntax.
 
 
 
