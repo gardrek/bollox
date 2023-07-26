@@ -156,6 +156,11 @@ while wait_for_input {
                 var a = stack.pop();
                 stack.push(a / b);
             }
+            "mod" {
+                var b = stack.pop();
+                var a = stack.pop();
+                stack.push(a % b);
+            }
         }
         print_stack(stack);
     }

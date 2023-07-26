@@ -330,15 +330,6 @@ impl Interpreter {
             Ok(Object::Nil)
         }
 
-        /*
-        `getc()` - Read a single character from stdin and return the character code as an integer.
-
-        `chr(ch)` - Convert given character code number to a single-character string.
-
-        `exit(status)` - Exit with given status code.
-
-        `print_error(message)` - Print message string on stderr.
-        */
 
         self.define_global_item("clock", 0, clock);
         self.define_global_item("read", 0, read);
@@ -363,6 +354,38 @@ impl Interpreter {
 
         self.define_global_item("test", 0, test);
         */
+
+        fn require(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let filename_obj = &args[0];
+
+            match filename_obj {
+                Object::String(s) => {
+                    let filename = s.to_string();
+
+                    let source = std::fs::read_to_string(filename).unwrap();
+
+                    let result = crate::run_string(source.clone(), 0, false);
+
+                    match result {
+                        Ok(obj) => Ok(obj.unwrap()),
+                        Err(e) => {
+                            eprintln!(
+                                "error on line {:?}",
+                                crate::source::SourceLocation::error_line_number(&e, &source)
+                            );
+                            panic!()
+                        },
+                    }
+                }
+                _ => Ok(Object::Nil)
+            }
+
+        }
+
+        self.define_global_item("require", 1, require);
     }
 
     fn define_global_item(

@@ -84,7 +84,7 @@ Supports:
 
 ## Minor differences ##
 
-Some things that are errors in Lox are allowed by `bollox`, such as `return` from outside any function, or redefining a variable that is the parameter of the current function. These two are intentional changes. I plan to add an include system where returning from the main file gives the return value of the `include` call. And it just didn't make sense to me that redefining a variable is *sometimes* an error.
+Some things that are errors in Lox are allowed by `bollox`, such as `return` from outside any function, or redefining a variable that is the parameter of the current function. These two are intentional changes. `require` allows you to use the returned value from the top level of a file. And it just didn't make sense to me that redefining a variable is *sometimes* an error.
 
 Many error messages are quite different. Errors are not currently in the best shape.
 
@@ -99,6 +99,8 @@ Many error messages are quite different. Errors are not currently in the best sh
 `to_string(value)` - Returns a string representing whatever value is passed in.
 
 `to_number(value)` - If the value is a number, returns it. if the value is a string which it can parse as a float, it returns the parsed number. otherwise, returns `nil`. Numbers are parsed according to [this Rust standard library function](https://doc.rust-lang.org/stable/std/primitive.f64.html#method.from_str).
+
+`require(filename)` - Run a script and return whatever that script returns (using a return statement in the top level)
 
 `getc()` - Read a single byte from stdin and return it as an integer.
 

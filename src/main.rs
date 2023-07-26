@@ -123,7 +123,7 @@ fn main() {
     }
 }
 
-fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Option<String>> {
+pub fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Option<object::Object>> {
     // past me sure did this nonsense
     // FIXME: not sure why i am trying to do this at this point
     {
@@ -203,7 +203,5 @@ fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Opt
         },
     };
 
-    let s = format!("{}", obj);
-
-    Ok(Some(s))
+    Ok(Some(obj))
 }
