@@ -28,7 +28,7 @@ use string_interner::DefaultStringInterner;
 lazy_static! {
     pub static ref INTERNER: RwLock<DefaultStringInterner> =
         RwLock::new(DefaultStringInterner::new());
-    pub static ref SOURCE: RwLock<String> = RwLock::new(String::new());
+    //~ pub static ref SOURCE: RwLock<String> = RwLock::new(String::new());
     /* pub static ref SOURCE: RwLock<HashMap<PathBuf, String>> =
         RwLock::new(HashMap::new()); */
 }
@@ -64,6 +64,38 @@ fn run() -> GenericResult {
         // If no arguments, run interactively
         None => {
             let mut stdin = io::BufReader::new(io::stdin());
+            let mut parser = Parser::new(Scanner::new("", SourceId(0)));
+            let mut interpreter = Interpreter::new(clargs.compatibility);
+            loop {
+                write!(stdout, "> ")?;
+                stdout.flush()?;
+                let mut input = String::new();
+                stdin.read_line(&mut input)?;
+                parser.push_source_string(&input);
+
+                // TODO: handle errors instead of crashing
+                let statements = parser.parse_all()?;
+
+                if parser.errors.is_empty() {
+                    match interpreter.interpret_slice(&statements[..]) {
+                        Ok(_o) => (), //writeln!(stdout, "=> {}", o)?,
+                        Err(eor) => match eor {
+                            ErrorOrReturn::RuntimeError(e) => writeln!(stdout, "{}", e)?,
+                            ErrorOrReturn::Return(o) => writeln!(stdout, "=> {}", o)?,
+                            ErrorOrReturn::Break(_) => writeln!(stdout, "error: unexpected break")?,
+                        },
+                    }
+                }
+
+                while !parser.errors.is_empty() {
+                    let e = parser.errors.pop().unwrap();
+                    eprintln!("{}", e);
+                }
+
+                stdout.flush()?;
+            }
+            /*
+            let mut stdin = io::BufReader::new(io::stdin());
             let mut next_source_id = 0;
             loop {
                 write!(stdout, "> ")?;
@@ -71,13 +103,14 @@ fn run() -> GenericResult {
                 let mut input = String::new();
                 stdin.read_line(&mut input)?;
                 next_source_id += 1;
-                match run_string(input, next_source_id, clargs.compatibility) {
+                match &run_string(input, next_source_id, clargs.compatibility) {
                     Ok(Some(res)) => writeln!(stdout, "=> {}", res)?,
                     Ok(None) => (),
-                    Err(res) => writeln!(stdout, "eyoooo {:?}", res)?,
+                    Err(e) => writeln!(stdout, "{}", e)?,
                 }
                 stdout.flush()?;
             }
+            */
         }
 
         // If a filename is given, run it as a script
@@ -123,51 +156,18 @@ fn main() {
     }
 }
 
-pub fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result<Option<object::Object>> {
-    // past me sure did this nonsense
-    // FIXME: not sure why i am trying to do this at this point
-    {
-        let mut source_ref = SOURCE.write().unwrap();
-        source_ref.push_str(&source);
-    }
-
-    let mut sc = Scanner::new(&source, SourceId(id));
-    //~ let tokens = sc.collect_or_first_error()?;
-
-    //~ let (tokens, errors) = sc.collect_all_tokens_and_errors();
-
-    let (tokens, errors) = match sc.collect_all_tokens() {
-        Ok(tokens) => (tokens, None),
-        Err((tokens, errors)) => (tokens, Some(errors)),
-    };
-
-    if let Some(errors) = errors {
-        if !errors.is_empty() {
-            return Err(if errors.len() == 1 {
-                errors[0].clone()
-            } else {
-                crate::result::Error::ManyErrors(errors)
-            });
-        }
-    }
-
-    /*
-    for tk in &tokens {
-        eprint!("{} ", tk);
-        //~ eprintln!();
-        //~ eprintln!("len: {}", tk.location().length());
-        //~ eprintln!();
-    }
-    eprintln!();
-    //~ */
-
-    let mut parser = Parser::new(tokens);
+pub fn run_string(
+    source: String,
+    id: usize,
+    compatibility_mode: bool,
+) -> Result<Option<object::Object>> {
+    let mut parser = Parser::new(Scanner::new(&source, SourceId(id)));
     let statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();
 
     if had_error {
-    //~ if true {
+        //~ if true {
         for e in parser.errors {
             eprintln!(
                 "error on line {:?}: {}",
@@ -199,7 +199,7 @@ pub fn run_string(source: String, id: usize, compatibility_mode: bool) -> Result
         Err(eor) => match eor {
             ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
             ErrorOrReturn::Return(v) => v,
-            ErrorOrReturn::Break(_v) => todo!(),
+            ErrorOrReturn::Break(_v) => return Err(result::Error::BreakOutsideLoop),
         },
     };
 

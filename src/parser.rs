@@ -1,5 +1,6 @@
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
 use crate::object::Object;
+use crate::scanner::Scanner;
 use crate::source::SourceLocation;
 use crate::token::{Operator, ReservedWord, Token, TokenKind};
 
@@ -14,6 +15,7 @@ pub enum ParseErrorKind {
     MaxArgumentsExceeded,
     UnexpectedToken(Token),
     InvalidAssignmentTarget,
+    ScannerError(Box<crate::result::Error>),
 }
 
 impl From<ParseError> for crate::result::Error {
@@ -52,6 +54,7 @@ impl core::fmt::Display for ParseErrorKind {
             ),
             UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
             InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
+            ScannerError(e) => write!(f, "Scanner Error {}", e),
         }
     }
 }
@@ -71,41 +74,99 @@ impl core::fmt::Display for ParseError {
 }
 
 pub struct Parser {
-    tokens: Vec<Token>,
-    cursor: usize,
+    scanner: Scanner,
+    previous: Option<Token>,
+    current: Option<Token>,
     pub errors: Vec<ParseError>,
+    at_end: bool,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            cursor: 0,
+    pub fn new(scanner: Scanner) -> Self {
+        let mut p = Self {
+            scanner,
+            previous: None,
+            current: None,
             errors: vec![],
+            at_end: false,
+        };
+
+        p.init();
+
+        p
+    }
+
+    pub fn push_source_string(&mut self, s: &str) {
+        self.scanner.push_source_string(s);
+        self.init();
+    }
+
+    pub fn parse_all(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = vec![];
+        while !self.is_at_end() {
+            if let Some(stmt) = self.parse_next() {
+                statements.push(stmt?);
+            }
         }
+        Ok(statements)
+    }
+
+    fn init(&mut self) {
+        self.current = self.next_token();
+        self.at_end = self.current.is_none();
     }
 
     fn is_at_end(&self) -> bool {
-        self.cursor >= self.tokens.len()
+        self.at_end
     }
 
-    fn get_token(&self, c: usize) -> Option<&Token> {
-        if c < self.tokens.len() {
-            Some(&self.tokens[c])
-        } else {
-            None
+    // equivalent of jlox's parse()
+    fn parse_next(&mut self) -> Option<Result<Stmt, ParseError>> {
+        if self.is_at_end() {
+            return None;
+        }
+
+        match self.declaration() {
+            Ok(stmt) => Some(Ok(stmt)),
+            Err(err) => {
+                self.report(err);
+                self.synchronize();
+                None
+            }
         }
     }
 
     fn peek(&self) -> Option<&Token> {
-        let c = self.cursor;
-        self.get_token(c)
+        self.current.as_ref()
+    }
+
+    fn next_token(&mut self) -> Option<Token> {
+        match self.scanner.next() {
+            Some(r) => match r {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    let location = match &self.current {
+                        Some(t) => t.location.clone(),
+                        None => SourceLocation::bullshit(),
+                    };
+                    self.report(ParseError {
+                        location,
+                        kind: ParseErrorKind::ScannerError(Box::new(e)),
+                    });
+                    None
+                }
+            },
+            None => None,
+        }
     }
 
     fn advance(&mut self) -> Option<&Token> {
-        let c = self.cursor;
-        self.cursor += 1;
-        self.get_token(c)
+        self.previous = self.current.clone();
+        self.current = self.next_token();
+        if self.current.is_none() {
+            self.at_end = true;
+        }
+        self.previous.as_ref()
     }
 
     fn check(&self, kinds: &[TokenKind]) -> bool {
@@ -124,11 +185,7 @@ impl Parser {
     }
 
     fn peek_previous(&self) -> Option<&Token> {
-        if self.cursor == 0 {
-            return None;
-        }; // avoid underflow
-        let c = self.cursor - 1;
-        self.get_token(c)
+        self.previous.as_ref()
     }
 
     fn consume(
@@ -230,53 +287,6 @@ impl Parser {
 
         Ok(expr)
     }
-    pub fn parse_all(&mut self) -> Result<Vec<Stmt>, ParseError> {
-        let mut statements = vec![];
-        while !self.is_at_end() {
-            if let Some(stmt) = self.parse_next() {
-                statements.push(stmt?);
-            }
-        }
-        Ok(statements)
-    }
-
-    // equivalent of jlox's parse()
-    fn parse_next(&mut self) -> Option<Result<Stmt, ParseError>> {
-        if self.is_at_end() {
-            return None;
-        }
-
-        match self.declaration() {
-            Ok(stmt) => Some(Ok(stmt)),
-            Err(err) => {
-                self.report(err);
-                self.synchronize();
-
-                /*
-                let t = match self.peek() {
-                    Some(t) => t,
-                    None => {
-                        let location = SourceLocation::bullshit();
-                        return Some(Err(ParseError {
-                            location,
-                            kind: err.kind,
-                        }));
-                    }
-                };
-
-                let location = t.location.clone();
-
-                let e = ParseError {
-                    location,
-                    kind: err.kind,
-                };
-
-                Some(Err(e))
-                */
-                None
-            }
-        }
-    }
 }
 
 /// ### Recursive Descent
@@ -327,7 +337,10 @@ impl Parser {
         let mut associated_funcs = vec![];
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
-            if self.check_advance(&[TokenKind::Reserved(ReservedWord::Class)]).is_some() {
+            if self
+                .check_advance(&[TokenKind::Reserved(ReservedWord::Class)])
+                .is_some()
+            {
                 associated_funcs.push(self.function_declaration()?);
             } else {
                 methods.push(self.function_declaration()?);
@@ -655,6 +668,13 @@ impl Parser {
     fn switch_statement(&mut self) -> Result<Stmt, ParseError> {
         let subject = self.expression()?;
 
+        let subject_name = {
+            let mut interner = crate::INTERNER.write().unwrap();
+            interner.get_or_intern("switch")
+        };
+
+        let subject_declaration = Stmt::new(StmtKind::VariableDeclaration(subject_name, Some(subject)));
+
         if self.check_advance(&[TokenKind::LeftBrace]).is_none() {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         }
@@ -666,11 +686,16 @@ impl Parser {
 
             match branch.kind {
                 StmtKind::If(conditional, then_branch, else_branch) => {
+                    let subject_access = Expr {
+                        location: conditional.location.clone(),
+                        kind: ExprKind::VariableAccess(subject_name),
+                    };
+
                     branch = Stmt::new(StmtKind::If(
                         Expr {
                             location: conditional.location.clone(),
                             kind: ExprKind::Binary(
-                                Box::new(subject.clone()),
+                                Box::new(subject_access.clone()),
                                 Operator::EqualEqual,
                                 Box::new(conditional.clone()),
                             ),
@@ -683,7 +708,7 @@ impl Parser {
                         cases.push(branch);
                         break;
                     }
-                },
+                }
                 _ => unreachable!(),
             }
 
@@ -696,28 +721,31 @@ impl Parser {
             let branch = cases.pop().unwrap();
 
             match body {
-                Some(previous_branch) => {
-                    match branch.kind {
-                        StmtKind::If(conditional, then_branch, _) => {
-                            body = Some(Stmt::new(StmtKind::If(
-                                conditional,
-                                then_branch,
-                                Some(Box::new(previous_branch)),
-                            )));
-                        }
-                        _ => unreachable!(),
+                Some(previous_branch) => match branch.kind {
+                    StmtKind::If(conditional, then_branch, _) => {
+                        body = Some(Stmt::new(StmtKind::If(
+                            conditional,
+                            then_branch,
+                            Some(Box::new(previous_branch)),
+                        )));
                     }
-                }
+                    _ => unreachable!(),
+                },
                 None => body = Some(branch),
             }
         }
 
         self.consume_expected(&[TokenKind::RightBrace])?;
 
-        match body {
-            Some(b) => Ok(b),
-            None => Err(self.error(ParseErrorKind::MaxArgumentsExceeded)),
-        }
+        let body = match body {
+            Some(b) => b,
+            None => return Err(self.error(ParseErrorKind::MaxArgumentsExceeded)),
+        };
+
+        Ok(Stmt::new(StmtKind::Block(vec![
+            subject_declaration,
+            body,
+        ])))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -761,16 +789,14 @@ impl Parser {
     fn assignment(&mut self) -> Result<Expr, ParseError> {
         let expr = self.logical_or()?;
 
-        if let Some(op_token) = self
-            .check_advance(&[
-                TokenKind::Op(Operator::Equal),
-                TokenKind::Op(Operator::MinusEqual),
-                TokenKind::Op(Operator::PlusEqual),
-                TokenKind::Op(Operator::SlashEqual),
-                TokenKind::Op(Operator::StarEqual),
-                TokenKind::Op(Operator::PercentEqual),
-            ])
-        {
+        if let Some(op_token) = self.check_advance(&[
+            TokenKind::Op(Operator::Equal),
+            TokenKind::Op(Operator::MinusEqual),
+            TokenKind::Op(Operator::PlusEqual),
+            TokenKind::Op(Operator::SlashEqual),
+            TokenKind::Op(Operator::StarEqual),
+            TokenKind::Op(Operator::PercentEqual),
+        ]) {
             let token = op_token.clone();
 
             let value = Box::new(self.assignment()?);
@@ -780,9 +806,13 @@ impl Parser {
                     Operator::Equal => value,
                     a => Box::new(Expr {
                         location: expr.location.clone(),
-                        kind: ExprKind::Binary(Box::new(expr.clone()), a.binary_from_combined(), value),
+                        kind: ExprKind::Binary(
+                            Box::new(expr.clone()),
+                            a.binary_from_combined(),
+                            value,
+                        ),
                     }),
-                }
+                },
                 _ => unreachable!(),
             };
 

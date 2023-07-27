@@ -23,7 +23,6 @@ pub enum Object {
     Number(f64),
     String(StringKind),
     Callable(Callable),
-    //~ Instance(Instance),
     Instance(Rc<RefCell<Instance>>),
 }
 
@@ -43,16 +42,6 @@ impl Object {
     pub fn static_string(s: Sym) -> Object {
         Object::String(StringKind::Static(s))
     }
-
-    /*
-    pub fn static_string_from_str(s: &'static str) -> Object {
-        let sym = {
-            let mut interner = INTERNER.write().unwrap();
-            interner.get_or_intern(s)
-        };
-        Object::String(StringKind::Static(sym))
-    }
-    */
 
     pub fn dynamic_string(s: String) -> Object {
         Object::String(StringKind::Dynamic(s))

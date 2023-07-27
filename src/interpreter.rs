@@ -330,7 +330,6 @@ impl Interpreter {
             Ok(Object::Nil)
         }
 
-
         self.define_global_item("clock", 0, clock);
         self.define_global_item("read", 0, read);
         self.define_global_item("to_string", 1, to_string);
@@ -377,12 +376,11 @@ impl Interpreter {
                                 crate::source::SourceLocation::error_line_number(&e, &source)
                             );
                             panic!()
-                        },
+                        }
                     }
                 }
-                _ => Ok(Object::Nil)
+                _ => Ok(Object::Nil),
             }
-
         }
 
         self.define_global_item("require", 1, require);
@@ -835,7 +833,7 @@ impl Interpreter {
                             )
                             .into());
                         }
-                    }
+                    },
                     Greater => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n > right_n),
                         (Number(_), _) => {
@@ -906,7 +904,8 @@ impl Interpreter {
                     },
                     BangEqual => Object::Boolean(left != right),
                     EqualEqual => Object::Boolean(left == right),
-                    Comma | Dot | Equal | Semicolon | Bang | MinusEqual | PlusEqual | SlashEqual | StarEqual | PercentEqual => {
+                    Comma | Dot | Equal | Semicolon | Bang | MinusEqual | PlusEqual
+                    | SlashEqual | StarEqual | PercentEqual => {
                         return Err(RuntimeError::ice(
                             "op is not a binary operator. bad syntax tree",
                             expr.location.clone(),

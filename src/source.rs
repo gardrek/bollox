@@ -1,5 +1,49 @@
 use std::fmt;
 
+pub struct Source {
+    src: String,
+}
+
+impl Source {
+    pub fn new(s: &str) -> Source {
+        Source { src: s.to_string() }
+    }
+
+    pub fn push(&mut self, s: &str) {
+        self.src.push_str(s);
+    }
+
+    pub fn len(&self) -> usize {
+        self.src.len()
+    }
+
+    pub fn get_slice(&self, loc: &SourceLocation) -> &str {
+        &self.src[loc.range.clone()]
+    }
+
+    pub fn peek_char(&self, cursor: usize) -> Option<char> {
+        self.src[cursor..].chars().next()
+    }
+
+    pub fn get_line_number(&self, loc: SourceLocation) -> usize {
+        'l: {
+            let mut line_number = 1;
+
+            for (index, byte) in self.src.as_bytes().iter().enumerate() {
+                if loc.range.start == index {
+                    break 'l line_number;
+                }
+
+                if *byte == b'\n' {
+                    line_number += 1;
+                }
+            }
+
+            panic!("ICE: Source Location outside source at {}", loc);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SourceId(pub usize);
 
@@ -175,6 +219,7 @@ impl SourceLines {
         self.ranges[line_number].clone()
     }
 }
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -224,5 +269,4 @@ mod tests {
         // not sure what implications this has for pointing one past the end of the string/line
     }
 }
-
-*/
+//~ */

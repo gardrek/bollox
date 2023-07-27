@@ -4,7 +4,9 @@
 
 # Usage #
 
-`cargo run --release -- path/to/script.lox`
+`cargo run` - for interactive REPL.
+
+`cargo run --release -- path/to/script.lox` - to run a script.
 
 `cargo run --release -- --compatibility path/to/script.lox` - for better compatibility with standard Lox. Switches back to C-style `if` and `while` statements instead of Rust-style. In the future this may also change how closures capture their environment.
 

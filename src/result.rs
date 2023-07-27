@@ -1,4 +1,5 @@
 use crate::interpreter::RuntimeError;
+use crate::parser::ParseError;
 use crate::source::SourceLocation;
 use std::fmt;
 use std::io;
@@ -11,7 +12,8 @@ pub enum Error {
     Unimplemented(&'static str),
     Runtime(RuntimeError),
     ManyErrors(Vec<Error>),
-    Parser(crate::parser::ParseError),
+    Parser(ParseError),
+    BreakOutsideLoop,
 }
 
 impl Error {
@@ -42,6 +44,7 @@ impl fmt::Display for Error {
             Runtime(s) => write!(f, "{}", s),
             ManyErrors(_) => write!(f, "Many Errors"),
             Parser(st) => write!(f, "{}", st),
+            BreakOutsideLoop => write!(f, "Break Outside Loop"),
         }
     }
 }

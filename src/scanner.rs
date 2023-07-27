@@ -1,5 +1,5 @@
 use crate::result;
-use crate::source::{SourceId, SourceLocation};
+use crate::source::{Source, SourceId, SourceLocation};
 use crate::token::{string_as_reserved_word, Operator, Token, TokenKind};
 use crate::INTERNER;
 
@@ -13,9 +13,9 @@ fn is_identifier_continue(c: char) -> bool {
 
 //use std::path::PathBuf;
 
-pub struct Scanner<'a> {
+pub struct Scanner {
     // this is how we get the source file
-    source: &'a str,
+    source: Source,
     // ID for the source
     source_id: SourceId,
     // location, in bytes which we're currently looking at
@@ -26,10 +26,10 @@ pub struct Scanner<'a> {
     had_error: bool,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str, source_id: SourceId) -> Scanner<'a> {
+impl Scanner {
+    pub fn new(src: &str, source_id: SourceId) -> Scanner {
         Scanner {
-            source,
+            source: Source::new(src),
             source_id,
             cursor: 0,
             eof: false,
@@ -37,10 +37,15 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    pub fn push_source_string(&mut self, s: &str) {
+        self.eof = false;
+        self.source.push(s)
+    }
+
     fn advance_char(&mut self) -> Option<char> {
         let index = self.cursor;
         if index < self.source.len() {
-            let ch = self.source[index..].chars().next().unwrap();
+            let ch = self.peek_char().unwrap();
             self.cursor += ch.len_utf8();
             Some(ch)
         } else {
@@ -62,7 +67,7 @@ impl<'a> Scanner<'a> {
     */
 
     fn peek_char(&self) -> Option<char> {
-        self.source[self.cursor..].chars().next()
+        self.source.peek_char(self.cursor)
     }
 
     fn static_token(&mut self, kind: TokenKind, length: usize) -> Token {
@@ -198,7 +203,12 @@ impl<'a> Scanner<'a> {
 
         let location = SourceLocation::from_range(offset..(offset + length));
 
-        let value = location.get_slice(self.source).parse::<f64>().ok().unwrap();
+        let value = self
+            .source
+            .get_slice(&location)
+            .parse::<f64>()
+            .ok()
+            .unwrap();
 
         Token {
             location,
@@ -236,7 +246,7 @@ impl<'a> Scanner<'a> {
             there's no reason to keep the lock longer than necessary
         */
         let sym = {
-            let s = &location.get_slice(self.source)[1..length - 1];
+            let s = &self.source.get_slice(&location)[1..length - 1];
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(s)
         };
@@ -267,7 +277,7 @@ impl<'a> Scanner<'a> {
 
         let location = SourceLocation::from_range(offset..(offset + length));
 
-        let slicing = location.get_slice(self.source);
+        let slicing = self.source.get_slice(&location);
 
         let kind = if let Some(word) = string_as_reserved_word(slicing) {
             TokenKind::Reserved(word)
@@ -280,31 +290,6 @@ impl<'a> Scanner<'a> {
         };
 
         Token { location, kind }
-    }
-
-    pub fn collect_all_tokens(&mut self) -> Result<Vec<Token>, (Vec<Token>, Vec<result::Error>)> {
-        let mut tokens = vec![];
-        let mut errors = None;
-
-        loop {
-            match self.next() {
-                Some(result_token) => match result_token {
-                    Ok(token) => tokens.push(token),
-                    Err(error) => {
-                        if errors.is_none() {
-                            errors = Some(vec![]);
-                        }
-                        errors.as_mut().unwrap().push(error);
-                    }
-                },
-                None => {
-                    return match errors {
-                        Some(e) => Err((tokens, e)),
-                        None => Ok(tokens),
-                    }
-                }
-            }
-        }
     }
 
     fn error_unimplemented(&mut self, s: &'static str) -> result::Error {
@@ -372,7 +357,7 @@ impl<'a> Scanner<'a> {
                         }
                         '=' => {
                             self.cursor += 1;
-                            break self.static_token(Op(SlashEqual), 1)
+                            break self.static_token(Op(SlashEqual), 1);
                         }
                         _ => break self.static_token(Op(Slash), 1),
                     },
@@ -409,7 +394,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-impl Iterator for Scanner<'_> {
+impl Iterator for Scanner {
     type Item = Result<Token, result::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
