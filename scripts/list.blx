@@ -77,7 +77,7 @@ class List {
     }
 
     count() {
-        return accumulate(0, fun(count, _value) {
+        return this.accumulate(0, fun(count, _value) {
             count = count + 1;
         });
     }

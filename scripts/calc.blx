@@ -1,4 +1,4 @@
-var List = require("scripts/list.lox");
+var List = require("scripts/list.blx");
 
 class DefaultStack < List {
     init(default) {
@@ -28,26 +28,57 @@ fun print_stack(stack) {
     print "[ " + stack.accumulate("", concat_list) + "]";
 }
 
+fun is_whitespace_or_eof(c) {
+    return c == 10 or c == 13 or c == 32 or c == -1;
+}
+
+var last_char;
+fun read_word() {
+    while true {
+        last_char = getc();
+
+        if last_char == -1 {
+            return nil;
+        }
+
+        if !is_whitespace_or_eof(last_char) {
+            break;
+        }
+
+    }
+
+    var word = "";
+    while !is_whitespace_or_eof(last_char) {
+        word = word + chr(last_char);
+
+        last_char = getc();
+    }
+
+    return word;
+}
+
 while wait_for_input {
-    input = read();
-    if ((input == "quit") or (input == "q") or (input == "exit")) {
+    input = read_word();
+    if !input or input == "quit" or input == "q" or input == "exit" {
         wait_for_input = false;
-        print "quitting...";
     } else if input != "" {
         var number = to_number(input);
         if number {
             stack.push(number);
         } else switch input {
-            "pop" {
+            "view", "v" {
+                print_stack(stack);
+            }
+            "pop", "p" {
                 var a = stack.pop();
                 print a;
             }
-            "dup" {
+            "dup", "d" {
                 var a = stack.pop();
                 stack.push(a);
                 stack.push(a);
             }
-            "swap" {
+            "swap", "s" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(b);
@@ -79,6 +110,5 @@ while wait_for_input {
                 stack.push(a % b);
             }
         }
-        print_stack(stack);
     }
 }

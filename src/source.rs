@@ -25,7 +25,7 @@ impl Source {
         self.src[cursor..].chars().next()
     }
 
-    pub fn get_line_number(&self, loc: SourceLocation) -> usize {
+    pub fn get_line_number(&self, loc: &SourceLocation) -> usize {
         'l: {
             let mut line_number = 1;
 

@@ -197,7 +197,15 @@ pub fn run_string(
     let obj = match interpreter.interpret_slice(&statements[..]) {
         Ok(obj) => obj,
         Err(eor) => match eor {
-            ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
+            ErrorOrReturn::RuntimeError(e) => {
+                let src = source::Source::new(&source);
+                eprintln!(
+                    "error on line {:?}",
+                    src.get_line_number(&e.location),
+                );
+
+                return Err(e.into());
+            }
             ErrorOrReturn::Return(v) => v,
             ErrorOrReturn::Break(_v) => return Err(result::Error::BreakOutsideLoop),
         },
