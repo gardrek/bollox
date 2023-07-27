@@ -48,13 +48,17 @@ switch input {
         stack.push(a);
         stack.push(a);
     }
-    ("pop") stack.pop();
-    "add" {
+    "pop" => {
+        stack.pop();
+    }
+    "add", "+" {
         var b = stack.pop();
         var a = stack.pop();
         stack.push(a + b);
     }
-    else print_stack(stack);
+    else {
+        print_stack(stack);
+    }
 }
 
 ==>
@@ -63,14 +67,15 @@ if input == "dup" {
     var a = stack.pop();
     stack.push(a);
     stack.push(a);
-} else if (input == "pop")
+} else if input == "pop" {
     stack.pop();
-else if input == "add" {
+} else if input == "add" or input == "+" {
     var b = stack.pop();
     var a = stack.pop();
     stack.push(a + b);
-} else
+} else {
     print_stack(stack);
+}
 ```
 
 

@@ -53,27 +53,27 @@ while wait_for_input {
                 stack.push(b);
                 stack.push(a);
             }
-            "add" {
+            "add", "+" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(a + b);
             }
-            "sub" {
+            "sub", "-" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(a - b);
             }
-            "mul" {
+            "mul", "*" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(a * b);
             }
-            "div" {
+            "div", "/" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(a / b);
             }
-            "mod" {
+            "mod", "%" {
                 var b = stack.pop();
                 var a = stack.pop();
                 stack.push(a % b);

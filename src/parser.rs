@@ -673,79 +673,123 @@ impl Parser {
             interner.get_or_intern("switch")
         };
 
-        let subject_declaration = Stmt::new(StmtKind::VariableDeclaration(subject_name, Some(subject)));
+        let subject_access = Expr {
+            location: subject.location.clone(),
+            kind: ExprKind::VariableAccess(subject_name),
+        };
+
+        let subject_declaration =
+            Stmt::new(StmtKind::VariableDeclaration(subject_name, Some(subject)));
 
         if self.check_advance(&[TokenKind::LeftBrace]).is_none() {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         }
 
-        let mut cases = vec![];
+        let mut branches = vec![];
 
-        while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
-            let mut branch = self.if_statement()?;
+        while !self.check(&[
+            TokenKind::RightBrace,
+            TokenKind::Reserved(ReservedWord::Else),
+        ]) && !self.is_at_end()
+        {
+            let branch = self.switch_arm(&subject_access)?;
 
-            match branch.kind {
-                StmtKind::If(conditional, then_branch, else_branch) => {
-                    let subject_access = Expr {
-                        location: conditional.location.clone(),
-                        kind: ExprKind::VariableAccess(subject_name),
-                    };
-
-                    branch = Stmt::new(StmtKind::If(
-                        Expr {
-                            location: conditional.location.clone(),
-                            kind: ExprKind::Binary(
-                                Box::new(subject_access.clone()),
-                                Operator::EqualEqual,
-                                Box::new(conditional.clone()),
-                            ),
-                        },
-                        then_branch,
-                        else_branch.clone(),
-                    ));
-
-                    if else_branch.is_some() {
-                        cases.push(branch);
-                        break;
-                    }
-                }
-                _ => unreachable!(),
-            }
-
-            cases.push(branch);
+            branches.push(branch);
         }
+
+        let else_branch = if self
+            .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
+            .is_some()
+        {
+            self.consume_expected(&[TokenKind::LeftBrace])?;
+
+            let body = Box::new(Stmt::new(StmtKind::Block(self.block()?)));
+
+            Some(body)
+        } else {
+            None
+        };
+
+        self.consume_expected(&[TokenKind::RightBrace])?;
 
         let mut body: Option<Stmt> = None;
 
-        while !cases.is_empty() {
-            let branch = cases.pop().unwrap();
+        while !branches.is_empty() {
+            let branch = branches.pop().unwrap();
 
-            match body {
-                Some(previous_branch) => match branch.kind {
-                    StmtKind::If(conditional, then_branch, _) => {
-                        body = Some(Stmt::new(StmtKind::If(
-                            conditional,
-                            then_branch,
-                            Some(Box::new(previous_branch)),
-                        )));
-                    }
-                    _ => unreachable!(),
-                },
-                None => body = Some(branch),
+            let else_branch = match body {
+                Some(previous_branch) => Some(Box::new(previous_branch)),
+                None => else_branch.clone(),
+            };
+
+            match branch.kind {
+                StmtKind::If(conditional, then_branch, _) => {
+                    body = Some(Stmt::new(StmtKind::If(
+                        conditional,
+                        then_branch,
+                        else_branch,
+                    )));
+                }
+                _ => unreachable!(),
             }
         }
-
-        self.consume_expected(&[TokenKind::RightBrace])?;
 
         let body = match body {
             Some(b) => b,
             None => return Err(self.error(ParseErrorKind::MaxArgumentsExceeded)),
         };
 
-        Ok(Stmt::new(StmtKind::Block(vec![
-            subject_declaration,
-            body,
-        ])))
+        Ok(Stmt::new(StmtKind::Block(vec![subject_declaration, body])))
+    }
+
+    fn switch_arm(&mut self, subject_access: &Expr) -> Result<Stmt, ParseError> {
+        let mut cases = vec![];
+        while !self.check(&[TokenKind::LeftBrace]) && !self.is_at_end() {
+            cases.push(self.expression()?);
+
+            if self
+                .check_advance(&[TokenKind::Op(Operator::Comma)])
+                .is_none()
+            {
+                break;
+            }
+        }
+
+        self.consume_expected(&[TokenKind::LeftBrace])?;
+
+        let body = self.block()?;
+
+        let mut conditional: Option<Expr> = None;
+
+        while !cases.is_empty() {
+            let case = cases.pop().unwrap();
+
+            let eq_expr = Expr {
+                location: case.location.clone(),
+                kind: ExprKind::Binary(
+                    Box::new(subject_access.clone()),
+                    Operator::EqualEqual,
+                    Box::new(case.clone()),
+                ),
+            };
+
+            conditional = match conditional {
+                Some(cond) => {
+                    Some(Expr {
+                        location: case.location.clone(),
+                        kind: ExprKind::LogicalOr(Box::new(eq_expr), Box::new(cond.clone())),
+                    })
+                }
+                None => Some(eq_expr),
+            };
+        }
+
+        let conditional = match conditional {
+            Some(c) => c,
+            None => unreachable!(),
+        };
+
+        Ok(Stmt::new(StmtKind::If(conditional, Box::new(Stmt::new(StmtKind::Block(body))), None)))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
