@@ -135,11 +135,12 @@ pub struct LoxFunction {
     pub closure: Rc<RefCell<Environment>>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct NativeFunction {
     pub name: &'static str,
     pub arity: usize,
     pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
+    pub closure: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Callable {
@@ -257,6 +258,12 @@ impl PartialEq for LoxFunction {
     fn eq(&self, other: &Self) -> bool {
         // here's a hacky way to not have to add another Rc
         Rc::ptr_eq(&self.closure, &other.closure)
+    }
+}
+
+impl PartialEq for NativeFunction {
+    fn eq(&self, _other: &Self) -> bool {
+        false
     }
 }
 

@@ -121,6 +121,11 @@ pub struct Interpreter {
     compatibility_mode: bool,
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
+    native_methods: HashMap<Sym, NativeMethods>,
+}
+
+struct NativeMethods {
+    pub methods: HashMap<Sym, NativeFunction>,
 }
 
 impl Environment {
@@ -330,30 +335,6 @@ impl Interpreter {
             Ok(Object::Nil)
         }
 
-        self.define_global_item("clock", 0, clock);
-        self.define_global_item("read", 0, read);
-        self.define_global_item("to_string", 1, to_string);
-        self.define_global_item("to_number", 1, to_number);
-        self.define_global_item("getc", 0, getc);
-        self.define_global_item("chr", 1, chr);
-        self.define_global_item("exit", 1, exit);
-        self.define_global_item("print_error", 1, print_error);
-
-        /*
-        fn test(
-            _interpreter: &mut Interpreter,
-            _args: Vec<Object>,
-        ) -> Result<Object, ErrorOrReturn> {
-            let s = "string";
-
-            let b = Object::dynamic_string(s.to_string()) == Object::static_string_from_str(s);
-
-            Ok(Object::Boolean(b))
-        }
-
-        self.define_global_item("test", 0, test);
-        */
-
         fn require(
             _interpreter: &mut Interpreter,
             args: Vec<Object>,
@@ -383,27 +364,204 @@ impl Interpreter {
             }
         }
 
-        self.define_global_item("require", 1, require);
+        self.define_global_function("clock", 0, clock);
+        self.define_global_function("read", 0, read);
+        self.define_global_function("to_string", 1, to_string);
+        self.define_global_function("to_number", 1, to_number);
+        self.define_global_function("getc", 0, getc);
+        self.define_global_function("chr", 1, chr);
+        self.define_global_function("exit", 1, exit);
+        self.define_global_function("print_error", 1, print_error);
+        self.define_global_function("require", 1, require);
+
+        /*
+        fn test(
+            _interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let s = "string";
+
+            let b = Object::dynamic_string(s.to_string()) == Object::static_string_from_str(s);
+
+            Ok(Object::Boolean(b))
+        }
+
+        self.define_global_function("test", 0, test);
+        */
     }
 
-    fn define_global_item(
+    fn define_global_function(
         &mut self,
         name: &'static str,
         arity: usize,
         func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
     ) {
+        self.define_global(
+            name,
+            Object::Callable(Callable::Native(NativeFunction {
+                name,
+                arity,
+                func,
+                closure: None,
+            })),
+        );
+    }
+
+    pub fn init_native_methods(&mut self) {
+        let array_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("Array")
+        };
+
+        let len_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("len")
+        };
+
+        fn len_fn(
+            interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let this_name = {
+                let mut interner = INTERNER.write().unwrap();
+                interner.get_or_intern("this")
+            };
+
+            let this = match interpreter.get_binding(&this_name) {
+                Some(o) => o,
+                None => {
+                    return Err(RuntimeError::ice(
+                        "this not defined for method",
+                        SourceLocation::bullshit(),
+                    )
+                    .into())
+                }
+            };
+
+            match this {
+                Object::Array(v) => Ok(Object::Number(v.borrow().len() as f64)),
+                _ => Err(RuntimeError::ice(
+                    "this not an array for array method",
+                    SourceLocation::bullshit(),
+                )
+                .into()),
+            }
+        }
+
+        let len_fn = NativeFunction {
+            name: "len",
+            arity: 0,
+            func: len_fn,
+            closure: None,
+        };
+
+        let push_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("push")
+        };
+
+        fn push_fn(
+            interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let obj = &args[0];
+
+            let this_name = {
+                let mut interner = INTERNER.write().unwrap();
+                interner.get_or_intern("this")
+            };
+
+            let this = match interpreter.get_binding(&this_name) {
+                Some(o) => o,
+                None => {
+                    return Err(RuntimeError::ice(
+                        "this not defined for method",
+                        SourceLocation::bullshit(),
+                    )
+                    .into())
+                }
+            };
+
+            match this {
+                Object::Array(v) => {
+                    v.borrow_mut().push(obj.clone());
+                    Ok(Object::nil())
+                }
+                _ => Err(RuntimeError::ice(
+                    "this not an array for array method",
+                    SourceLocation::bullshit(),
+                )
+                .into()),
+            }
+        }
+
+        let push_fn = NativeFunction {
+            name: "push",
+            arity: 1,
+            func: push_fn,
+            closure: None,
+        };
+
+        let pop_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("pop")
+        };
+
+        fn pop_fn(
+            interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let this_name = {
+                let mut interner = INTERNER.write().unwrap();
+                interner.get_or_intern("this")
+            };
+
+            let this = match interpreter.get_binding(&this_name) {
+                Some(o) => o,
+                None => {
+                    return Err(RuntimeError::ice(
+                        "this not defined for method",
+                        SourceLocation::bullshit(),
+                    )
+                    .into())
+                }
+            };
+
+            match this {
+                Object::Array(v) => {
+                    Ok(match v.borrow_mut().pop() {
+                        Some(o) => o,
+                        None => Object::nil(),
+                    })
+                }
+                _ => Err(RuntimeError::ice(
+                    "this not an array for array method",
+                    SourceLocation::bullshit(),
+                )
+                .into()),
+            }
+        }
+
+        let pop_fn = NativeFunction {
+            name: "pop",
+            arity: 0,
+            func: pop_fn,
+            closure: None,
+        };
+
+        let methods: HashMap<Sym, NativeFunction> =
+            [(len_name, len_fn), (push_name, push_fn), (pop_name, pop_fn)].into();
+
+        self.native_methods
+            .insert(array_name, NativeMethods { methods });
+    }
+
+    fn define_global(&mut self, name: &'static str, obj: Object) {
         let mut interner = INTERNER.write().unwrap();
 
         let sym = interner.get_or_intern(name);
 
-        self.globals.borrow_mut().define(
-            &sym,
-            Object::Callable(Callable::Native(NativeFunction {
-                name: "clock",
-                arity,
-                func,
-            })),
-        );
+        self.globals.borrow_mut().define(&sym, obj);
     }
 
     pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
@@ -631,7 +789,29 @@ impl Interpreter {
     ) -> Result<Object, ErrorOrReturn> {
         use Callable::*;
         match callee {
-            Native(f) => (f.func)(self, arguments),
+            Native(f) => match &f.closure {
+                Some(closure) => {
+                    let call_environment = Environment::new_inner(closure.clone());
+
+                    let old_environment = std::mem::take(&mut self.environment);
+
+                    self.environment = call_environment;
+
+                    let ret = (f.func)(self, arguments);
+
+                    self.environment = old_environment;
+
+                    Ok(match ret {
+                        Ok(obj) => obj,
+                        Err(eor) => match eor {
+                            ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
+                            ErrorOrReturn::Return(v) => v,
+                            ErrorOrReturn::Break(_v) => todo!(),
+                        },
+                    })
+                }
+                None => (f.func)(self, arguments),
+            },
             Lox(f) => {
                 let closure = &f.closure;
 
@@ -1023,6 +1203,48 @@ impl Interpreter {
                             }
                         }
                     }
+                    Array(arr) => {
+                        let array_name = {
+                            let mut interner = INTERNER.write().unwrap();
+                            interner.get_or_intern("Array")
+                        };
+
+                        if let Some(array_methods) = self.native_methods.get(&array_name) {
+                            if let Some(method) = array_methods.methods.get(name) {
+                                let mut method = method.clone();
+
+                                let new_env = match method.closure {
+                                    Some(closure) => Environment::new_inner(closure.clone()),
+                                    None => Rc::new(RefCell::new(Environment::default())),
+                                };
+
+                                let sym = {
+                                    let mut interner = INTERNER.write().unwrap();
+                                    interner.get_or_intern("this")
+                                };
+
+                                new_env
+                                    .borrow_mut()
+                                    .define(&sym, Object::Array(arr.clone()));
+
+                                method.closure = Some(new_env);
+
+                                Object::Callable(crate::object::Callable::Native(method))
+                            } else {
+                                return Err(RuntimeError::type_error(
+                                    "Cannot access property",
+                                    location,
+                                )
+                                .into());
+                            }
+                        } else {
+                            return Err(RuntimeError::type_error(
+                                "Cannot access property",
+                                location,
+                            )
+                            .into());
+                        }
+                    }
                     _ => {
                         return Err(RuntimeError::type_error(
                             "Cannot access property, not an instance or class",
@@ -1086,7 +1308,7 @@ impl Interpreter {
                     } else {
                         return Err(RuntimeError::ice(
                             "super is not a class. bad syntax tree",
-                            SourceLocation::bullshit(),
+                            expr.location.clone(),
                         )
                         .into());
                     };
@@ -1108,7 +1330,39 @@ impl Interpreter {
 
                 Object::Array(Rc::new(RefCell::new(v)))
             }
+            ArrayConstructorMulti(expr, multi) => {
+                let location = multi.location.clone();
+
+                let value = self.evaluate(expr)?;
+
+                let multi_value = match self.evaluate(multi)? {
+                    Object::Number(n) => {
+                        if n >= 0.0 {
+                            n as usize
+                        } else {
+                            return Err(RuntimeError::type_error(
+                                "Array constructer length must be a non-negative number",
+                                location,
+                            )
+                            .into());
+                        }
+                    }
+                    _o => {
+                        return Err(RuntimeError::type_error(
+                            "Array constructer length must be a non-negative number",
+                            location,
+                        )
+                        .into())
+                    }
+                };
+
+                let v = vec![value; multi_value];
+
+                Object::Array(Rc::new(RefCell::new(v)))
+            }
             Index(obj_expr, index) => {
+                let location = obj_expr.location.clone();
+
                 let obj = self.evaluate(obj_expr)?;
 
                 let index = match self.evaluate(index)? {
@@ -1116,10 +1370,20 @@ impl Interpreter {
                         if n >= 0.0 {
                             n as usize
                         } else {
-                            todo!()
+                            return Err(RuntimeError::type_error(
+                                "Array index must be a non-negative number",
+                                location,
+                            )
+                            .into());
                         }
                     }
-                    _o => todo!(),
+                    _o => {
+                        return Err(RuntimeError::type_error(
+                            "Array index must be a non-negative number",
+                            location,
+                        )
+                        .into())
+                    }
                 };
 
                 match obj {
@@ -1130,10 +1394,18 @@ impl Interpreter {
                             Object::Nil
                         }
                     }
-                    _o => todo!(),
+                    _o => {
+                        return Err(RuntimeError::type_error(
+                            "Attempt to index non-Array",
+                            location,
+                        )
+                        .into())
+                    }
                 }
             }
             IndexAssign(obj_expr, index, val) => {
+                let location = obj_expr.location.clone();
+
                 let obj = self.evaluate(obj_expr)?;
 
                 let index = match self.evaluate(index)? {
@@ -1141,10 +1413,20 @@ impl Interpreter {
                         if n >= 0.0 {
                             n as usize
                         } else {
-                            todo!()
+                            return Err(RuntimeError::type_error(
+                                "Array index must be a non-negative number",
+                                location,
+                            )
+                            .into());
                         }
                     }
-                    _o => todo!(),
+                    _o => {
+                        return Err(RuntimeError::type_error(
+                            "Array index must be a non-negative number",
+                            location,
+                        )
+                        .into())
+                    }
                 };
 
                 match obj {
@@ -1157,7 +1439,13 @@ impl Interpreter {
                             todo!()
                         }
                     }
-                    _o => todo!(),
+                    _o => {
+                        return Err(RuntimeError::type_error(
+                            "Attempt to index non-Array",
+                            location,
+                        )
+                        .into())
+                    }
                 }
             }
         })

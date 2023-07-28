@@ -16,6 +16,7 @@ pub enum ParseErrorKind {
     UnexpectedToken(Token),
     InvalidAssignmentTarget,
     ScannerError(Box<crate::result::Error>),
+    InvalidConstructor,
 }
 
 impl From<ParseError> for crate::result::Error {
@@ -55,6 +56,7 @@ impl core::fmt::Display for ParseErrorKind {
             UnexpectedToken(t) => write!(f, "Unexpected Token `{}`", t),
             InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
             ScannerError(e) => write!(f, "Scanner Error {}", e),
+            InvalidConstructor => write!(f, "Invalid Constructor"),
         }
     }
 }
@@ -254,7 +256,7 @@ impl Parser {
             use ReservedWord::*;
             if let TokenKind::Reserved(keyword) = &token.kind {
                 match keyword {
-                    Class | Fun | Var | For | If | While | Print | Return => break,
+                    Class | Fun | Var | For | If | While | Print | Return | Break | Switch => break,
                     _ => (),
                 }
             }
@@ -735,11 +737,11 @@ impl Parser {
         }
 
         let body = match body {
-            Some(b) => b,
-            None => return Err(self.error(ParseErrorKind::MaxArgumentsExceeded)),
+            Some(b) => vec![subject_declaration, b],
+            None => vec![subject_declaration],
         };
 
-        Ok(Stmt::new(StmtKind::Block(vec![subject_declaration, body])))
+        Ok(Stmt::new(StmtKind::Block(body)))
     }
 
     fn switch_arm(&mut self, subject_access: &Expr) -> Result<Stmt, ParseError> {
@@ -1095,6 +1097,27 @@ impl Parser {
                             .is_none()
                         {
                             break;
+                        }
+                    }
+
+                    if self
+                        .check_advance(&[TokenKind::Op(Operator::Semicolon)])
+                        .is_some()
+                    {
+                        let multiplier = self.expression()?;
+
+                        if exprs.len() == 1 {
+                            self.consume_expected(&[TokenKind::RightBracket])?;
+
+                            return Ok(Expr {
+                                location,
+                                kind: ExprKind::ArrayConstructorMulti(
+                                    Box::new(exprs.pop().unwrap()),
+                                    Box::new(multiplier),
+                                ),
+                            });
+                        } else {
+                            return Err(self.error(ParseErrorKind::InvalidConstructor));
                         }
                     }
 

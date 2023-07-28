@@ -52,6 +52,7 @@ pub enum ExprKind {
     This,
     Super(Sym),
     ArrayConstructor(Vec<Expr>),
+    ArrayConstructorMulti(Box<Expr>, Box<Expr>),
     Index(Box<Expr>, Box<Expr>),
     IndexAssign(Box<Expr>, Box<Expr>, Box<Expr>),
 }
@@ -157,6 +158,7 @@ impl fmt::Display for ExprKind {
                 }
                 write!(f, ")")
             }
+            ArrayConstructorMulti(obj, multi) => write!(f, "(array-multi {} {})", obj, multi),
             Index(obj, index) => write!(f, "(index {} {})", obj, index),
             IndexAssign(obj, index, val) => write!(f, "(index {} {} {})", obj, index, val),
         }

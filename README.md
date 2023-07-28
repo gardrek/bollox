@@ -85,6 +85,8 @@ var a = [-1, 0, 10 + 40, 10000, 0.4];
 print a[1]; // prints 0;
 
 a[1] = 5;
+
+var x = [0; 100]; // one hundred element array filled with zeroes
 ```
 
 
@@ -125,3 +127,12 @@ Many error messages are quite different. Errors are not currently in the best sh
 `exit(status)` - Exit with given status code.
 
 `print_error(message)` - Print message string on stderr.
+
+
+
+### Methods ###
+
+In addition to the above global functions, the following methods are defined on the array type:
+- `push(obj)` - Push `obj` onto the end of the array.
+- `pop()` - Pop an object off of the end of the array and returns it, or return nil if the array is empty.
+- `len()` - Returns the length of the array.

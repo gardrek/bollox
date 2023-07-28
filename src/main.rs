@@ -66,6 +66,10 @@ fn run() -> GenericResult {
             let mut stdin = io::BufReader::new(io::stdin());
             let mut parser = Parser::new(Scanner::new("", SourceId(0)));
             let mut interpreter = Interpreter::new(clargs.compatibility);
+
+            interpreter.init_global_environment();
+            interpreter.init_native_methods();
+
             loop {
                 write!(stdout, "> ")?;
                 stdout.flush()?;
@@ -193,6 +197,7 @@ pub fn run_string(
     let mut interpreter = Interpreter::new(compatibility_mode);
 
     interpreter.init_global_environment();
+    interpreter.init_native_methods();
 
     let obj = match interpreter.interpret_slice(&statements[..]) {
         Ok(obj) => obj,
