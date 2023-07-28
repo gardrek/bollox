@@ -1,37 +1,7 @@
 // Fucking Bollox
 
-var Iter = require("scripts/iter.blx");
-
-class ListNode {
-    init(value) {
-        this.value = value;
-        this.next = nil;
-        this.previous = nil;
-    }
-}
-
-class List {
-    init() {
-        this.head = nil;
-        this.tail = nil;
-    }
-
-    // Append value to the tail of the list.
-    append(value) {
-        var node = ListNode(value);
-        if this.head == nil {
-            this.head = node;
-            this.tail = node;
-        } else {
-            node.previous = this.tail;
-            this.tail.next = node;
-            this.tail = node;
-        }
-    }
-}
-
 var tape = [0; 30000];
-var instructions = List();
+var instructions = [];
 
 while true {
     var ch = getc();
@@ -40,21 +10,17 @@ while true {
         break;
     } else switch chr(ch) {
         "[", "]", ",", ".", "+", "-", "<", ">" {
-            instructions.append(chr(ch));
+            instructions.push(chr(ch));
         }
     }
 }
 
-fun todo() {
-    print "TODO";
-}
-
 var tape_pointer = 0;
-var instruction_pointer = instructions.head;
+var instruction_pointer = 0;
 var buffered_output = "";
 
-while instruction_pointer {
-    var inst = instruction_pointer.value;
+while instructions[instruction_pointer] {
+    var inst = instructions[instruction_pointer];
     switch inst {
         "+" {
             tape[tape_pointer] = (tape[tape_pointer] + 1) % 256;
@@ -83,12 +49,12 @@ while instruction_pointer {
         "[" {
             if tape[tape_pointer] == 0 {
                 var depth = 0;
-                while instruction_pointer.next {
-                    instruction_pointer = instruction_pointer.next;
-                    if instruction_pointer.value == "[" {
+                while instructions[instruction_pointer + 1] {
+                    instruction_pointer += 1;
+                    if instructions[instruction_pointer] == "[" {
                         depth += 1;
                     }
-                    if instruction_pointer.value == "]" {
+                    if instructions[instruction_pointer] == "]" {
                         if depth == 0 {
                             break;
                         }
@@ -100,12 +66,12 @@ while instruction_pointer {
         "]" {
             if tape[tape_pointer] != 0 {
                 var depth = 0;
-                while instruction_pointer.previous {
-                    instruction_pointer = instruction_pointer.previous;
-                    if instruction_pointer.value == "]" {
+                while instructions[instruction_pointer - 1] {
+                    instruction_pointer -= 1;
+                    if instructions[instruction_pointer] == "]" {
                         depth += 1;
                     }
-                    if instruction_pointer.value == "[" {
+                    if instructions[instruction_pointer] == "[" {
                         if depth == 0 {
                             break;
                         }
@@ -115,7 +81,7 @@ while instruction_pointer {
             }
         }
     }
-    instruction_pointer = instruction_pointer.next;
+    instruction_pointer += 1;
 }
 
 if buffered_output != "" { print buffered_output; }

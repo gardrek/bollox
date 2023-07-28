@@ -132,7 +132,12 @@ Many error messages are quite different. Errors are not currently in the best sh
 
 ### Methods ###
 
-In addition to the above global functions, the following methods are defined on the array type:
+In addition to the above global functions, the following methods are defined on the built-in types:
+
+Arrays:
 - `push(obj)` - Push `obj` onto the end of the array.
 - `pop()` - Pop an object off of the end of the array and returns it, or return nil if the array is empty.
 - `len()` - Returns the length of the array.
+
+Strings:
+- `len()` - Returns the length of the string.

@@ -301,6 +301,28 @@ impl Interpreter {
             }
         }
 
+        fn putc(
+            _interpreter: &mut Interpreter,
+            args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let obj = &args[0];
+
+            use std::io::Write;
+            match obj {
+                Object::Number(c) => {
+                    if *c >= 0.0 && *c < 256.0 {
+                        let c = *c as u8 as char;
+                        print!("{}", c);
+                        std::io::stdout().flush().unwrap();
+                        todo!()
+                    } else {
+                        todo!()
+                    }
+                }
+                _ => todo!(),
+            }
+        }
+
         fn chr(_interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, ErrorOrReturn> {
             let obj = &args[0];
 
@@ -369,6 +391,7 @@ impl Interpreter {
         self.define_global_function("to_string", 1, to_string);
         self.define_global_function("to_number", 1, to_number);
         self.define_global_function("getc", 0, getc);
+        self.define_global_function("putc", 1, putc);
         self.define_global_function("chr", 1, chr);
         self.define_global_function("exit", 1, exit);
         self.define_global_function("print_error", 1, print_error);
@@ -408,6 +431,65 @@ impl Interpreter {
     }
 
     pub fn init_native_methods(&mut self) {
+        self.init_string_native_methods();
+        self.init_array_native_methods();
+    }
+
+    pub fn init_string_native_methods(&mut self) {
+        let class_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("String")
+        };
+
+        let len_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern("len")
+        };
+
+        fn len_fn(
+            interpreter: &mut Interpreter,
+            _args: Vec<Object>,
+        ) -> Result<Object, ErrorOrReturn> {
+            let this_name = {
+                let mut interner = INTERNER.write().unwrap();
+                interner.get_or_intern("this")
+            };
+
+            let this = match interpreter.get_binding(&this_name) {
+                Some(o) => o,
+                None => {
+                    return Err(RuntimeError::ice(
+                        "`this` not defined for method",
+                        SourceLocation::bullshit(),
+                    )
+                    .into())
+                }
+            };
+
+            match this {
+                Object::String(s) => Ok(Object::Number(s.to_string().len() as f64)),
+                _ => Err(RuntimeError::ice(
+                    "`this` not a string for string method",
+                    SourceLocation::bullshit(),
+                )
+                .into()),
+            }
+        }
+
+        let len_fn = NativeFunction {
+            name: "len",
+            arity: 0,
+            func: len_fn,
+            closure: None,
+        };
+
+        let methods: HashMap<Sym, NativeFunction> = [(len_name, len_fn)].into();
+
+        self.native_methods
+            .insert(class_name, NativeMethods { methods });
+    }
+
+    pub fn init_array_native_methods(&mut self) {
         let array_name = {
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern("Array")
@@ -431,7 +513,7 @@ impl Interpreter {
                 Some(o) => o,
                 None => {
                     return Err(RuntimeError::ice(
-                        "this not defined for method",
+                        "`this` not defined for method",
                         SourceLocation::bullshit(),
                     )
                     .into())
@@ -441,7 +523,7 @@ impl Interpreter {
             match this {
                 Object::Array(v) => Ok(Object::Number(v.borrow().len() as f64)),
                 _ => Err(RuntimeError::ice(
-                    "this not an array for array method",
+                    "`this` not an array for array method",
                     SourceLocation::bullshit(),
                 )
                 .into()),
@@ -475,7 +557,7 @@ impl Interpreter {
                 Some(o) => o,
                 None => {
                     return Err(RuntimeError::ice(
-                        "this not defined for method",
+                        "`this` not defined for method",
                         SourceLocation::bullshit(),
                     )
                     .into())
@@ -488,7 +570,7 @@ impl Interpreter {
                     Ok(Object::nil())
                 }
                 _ => Err(RuntimeError::ice(
-                    "this not an array for array method",
+                    "`this` not an array for array method",
                     SourceLocation::bullshit(),
                 )
                 .into()),
@@ -520,7 +602,7 @@ impl Interpreter {
                 Some(o) => o,
                 None => {
                     return Err(RuntimeError::ice(
-                        "this not defined for method",
+                        "`this` not defined for method",
                         SourceLocation::bullshit(),
                     )
                     .into())
@@ -528,14 +610,12 @@ impl Interpreter {
             };
 
             match this {
-                Object::Array(v) => {
-                    Ok(match v.borrow_mut().pop() {
-                        Some(o) => o,
-                        None => Object::nil(),
-                    })
-                }
+                Object::Array(v) => Ok(match v.borrow_mut().pop() {
+                    Some(o) => o,
+                    None => Object::nil(),
+                }),
                 _ => Err(RuntimeError::ice(
-                    "this not an array for array method",
+                    "`this` not an array for array method",
                     SourceLocation::bullshit(),
                 )
                 .into()),
@@ -862,6 +942,45 @@ impl Interpreter {
 
                 Ok(instance)
             }
+        }
+    }
+
+    fn access_native_method(
+        &mut self,
+        class_name_str: &'static str,
+        obj: Object,
+        method_name: &Sym,
+        location: SourceLocation,
+    ) -> Result<Object, ErrorOrReturn> {
+        let class_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern(class_name_str)
+        };
+
+        if let Some(methods) = self.native_methods.get(&class_name) {
+            if let Some(method) = methods.methods.get(method_name) {
+                let mut method = method.clone();
+
+                let new_env = match method.closure {
+                    Some(closure) => Environment::new_inner(closure.clone()),
+                    None => Rc::new(RefCell::new(Environment::default())),
+                };
+
+                let sym = {
+                    let mut interner = INTERNER.write().unwrap();
+                    interner.get_or_intern("this")
+                };
+
+                new_env.borrow_mut().define(&sym, obj);
+
+                method.closure = Some(new_env);
+
+                Ok(Object::Callable(crate::object::Callable::Native(method)))
+            } else {
+                Err(RuntimeError::type_error("Cannot access property", location).into())
+            }
+        } else {
+            Err(RuntimeError::type_error("Cannot access property", location).into())
         }
     }
 
@@ -1203,47 +1322,9 @@ impl Interpreter {
                             }
                         }
                     }
-                    Array(arr) => {
-                        let array_name = {
-                            let mut interner = INTERNER.write().unwrap();
-                            interner.get_or_intern("Array")
-                        };
-
-                        if let Some(array_methods) = self.native_methods.get(&array_name) {
-                            if let Some(method) = array_methods.methods.get(name) {
-                                let mut method = method.clone();
-
-                                let new_env = match method.closure {
-                                    Some(closure) => Environment::new_inner(closure.clone()),
-                                    None => Rc::new(RefCell::new(Environment::default())),
-                                };
-
-                                let sym = {
-                                    let mut interner = INTERNER.write().unwrap();
-                                    interner.get_or_intern("this")
-                                };
-
-                                new_env
-                                    .borrow_mut()
-                                    .define(&sym, Object::Array(arr.clone()));
-
-                                method.closure = Some(new_env);
-
-                                Object::Callable(crate::object::Callable::Native(method))
-                            } else {
-                                return Err(RuntimeError::type_error(
-                                    "Cannot access property",
-                                    location,
-                                )
-                                .into());
-                            }
-                        } else {
-                            return Err(RuntimeError::type_error(
-                                "Cannot access property",
-                                location,
-                            )
-                            .into());
-                        }
+                    Array(_) => self.access_native_method("Array", obj.clone(), name, location)?,
+                    String(_) => {
+                        self.access_native_method("String", obj.clone(), name, location)?
                     }
                     _ => {
                         return Err(RuntimeError::type_error(

@@ -335,7 +335,13 @@ impl fmt::Display for Object {
             String(kind) => write!(f, "{}", kind),
             Callable(c) => write!(f, "{}", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
-            Array(_) => write!(f, "[Array]"),
+            Array(vec) => {
+                write!(f, "[array")?;
+                for item in vec.borrow().iter() {
+                    write!(f, " {}", item)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -373,7 +379,13 @@ impl fmt::Debug for Object {
             String(kind) => write!(f, "\"{}\"", kind),
             Callable(c) => write!(f, "{}", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
-            Array(_) => write!(f, "[Array]"),
+            Array(vec) => {
+                write!(f, "[array")?;
+                for item in vec.borrow().iter() {
+                    write!(f, " {}", item)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
