@@ -1,0 +1,41 @@
+class ListNode {
+    init(value) {
+        this.value = value;
+        this.next = nil;
+        this.previous = nil;
+    }
+}
+
+class List {
+    init() {
+        this.head = nil;
+        this.tail = nil;
+    }
+
+    // Append value to the tail of the list.
+    append(value) {
+        var node = ListNode(value);
+        if this.head == nil {
+            this.head = node;
+            this.tail = node;
+        } else {
+            node.next = this.head;
+            this.head = node;
+
+            node.previous = this.tail;
+            this.tail.next = node;
+            this.tail = node;
+        }
+    }
+
+    iter_nodes() {
+        var node = this.head;
+        return fun() {
+            if node {
+                var next = node;
+                node = node.next;
+                return next;
+            }
+        };
+    }
+}

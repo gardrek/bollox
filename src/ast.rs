@@ -51,6 +51,9 @@ pub enum ExprKind {
     PropertyAssign(Box<Expr>, Sym, Box<Expr>),
     This,
     Super(Sym),
+    ArrayConstructor(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+    IndexAssign(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 impl fmt::Display for Stmt {
@@ -147,6 +150,15 @@ impl fmt::Display for ExprKind {
             }
             This => write!(f, "(this)"),
             Super(expr) => write!(f, "(super {:?})", expr),
+            ArrayConstructor(exprs) => {
+                write!(f, "(array")?;
+                for e in exprs {
+                    write!(f, " {}", e)?;
+                }
+                write!(f, ")")
+            }
+            Index(obj, index) => write!(f, "(index {} {})", obj, index),
+            IndexAssign(obj, index, val) => write!(f, "(index {} {} {})", obj, index, val),
         }
     }
 }

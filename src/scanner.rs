@@ -338,6 +338,8 @@ impl Scanner {
                 ')' => break self.static_token(RightParen, 1),
                 '{' => break self.static_token(LeftBrace, 1),
                 '}' => break self.static_token(RightBrace, 1),
+                '[' => break self.static_token(LeftBracket, 1),
+                ']' => break self.static_token(RightBracket, 1),
                 ',' => break self.static_token(Op(Comma), 1),
                 '.' => break self.static_token(Op(Dot), 1),
                 '-' => break self.match_static_operator('=', MinusEqual, Minus, 1)?,

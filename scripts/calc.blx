@@ -29,7 +29,11 @@ fun print_stack(stack) {
 }
 
 fun is_whitespace_or_eof(c) {
-    return c == 10 or c == 13 or c == 32 or c == -1;
+    switch c {
+        -1, 10, 13, 32 {
+            return true;
+        }
+    }
 }
 
 var last_char;

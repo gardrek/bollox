@@ -78,6 +78,15 @@ if input == "dup" {
 }
 ```
 
+Basic array support. Currently arrays are fixed-size but can be mutated in-place.
+```js
+var a = [-1, 0, 10 + 40, 10000, 0.4];
+
+print a[1]; // prints 0;
+
+a[1] = 5;
+```
+
 
 ## Book Challenge Extensions ##
 

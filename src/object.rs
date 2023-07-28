@@ -24,6 +24,7 @@ pub enum Object {
     String(StringKind),
     Callable(Callable),
     Instance(Rc<RefCell<Instance>>),
+    Array(Rc<RefCell<Vec<Object>>>),
 }
 
 impl Object {
@@ -278,6 +279,7 @@ impl PartialEq for Object {
             },
             (Callable(a), Callable(b)) => a == b,
             (Instance(rc_a), Instance(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
+            (Array(rc_a), Array(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
 
             #[allow(unreachable_patterns)]
             (Nil, _)
@@ -291,7 +293,9 @@ impl PartialEq for Object {
             | (Callable(_), _)
             | (_, Callable(_))
             | (Instance(_), _)
-            | (_, Instance(_)) => false,
+            | (_, Instance(_))
+            | (Array(_), _)
+            | (_, Array(_)) => false,
         }
     }
 }
@@ -324,6 +328,7 @@ impl fmt::Display for Object {
             String(kind) => write!(f, "{}", kind),
             Callable(c) => write!(f, "{}", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
+            Array(_) => write!(f, "[Array]"),
         }
     }
 }
@@ -361,6 +366,7 @@ impl fmt::Debug for Object {
             String(kind) => write!(f, "\"{}\"", kind),
             Callable(c) => write!(f, "{}", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
+            Array(_) => write!(f, "[Array]"),
         }
     }
 }

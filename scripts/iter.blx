@@ -1,35 +1,24 @@
-fun range(i, n) {
-    return fun() {
-        if i < n {
-            var out = i;
-            i = i + 1;
-            return out;
-        }
-    };
-}
-
-fun range_inclusive(i, n) {
-    fun counter() {
-        if i <= n {
-            var out = i;
-            i = i + 1;
-            return out;
-        }
+class Iter {
+    class range(i, n) {
+        return fun() {
+            if i < n {
+                var out = i;
+                i = i + 1;
+                return out;
+            }
+        };
     }
-    return counter;
-}
 
-for i in range(0, 8) { print i; }
-for i in range_inclusive(1, 8) { print i; }
-/*
-{
-    var f = range(0, 16);
-    var i = true;
-    while i {
-        i = f();
-        if i {
-            print i;
+    class range_inclusive(i, n) {
+        fun counter() {
+            if i <= n {
+                var out = i;
+                i = i + 1;
+                return out;
+            }
         }
+        return counter;
     }
 }
-*/
+
+return Iter;

@@ -16,6 +16,8 @@ pub enum TokenKind {
     RightParen,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
 
     // Operators, of course
     Op(Operator),
@@ -117,6 +119,8 @@ impl TokenKind {
             | (RightParen, RightParen)
             | (LeftBrace, LeftBrace)
             | (RightBrace, RightBrace)
+            | (LeftBracket, LeftBracket)
+            | (RightBracket, RightBracket)
             | (Number(_), Number(_))
             | (StaticString(_), StaticString(_))
             | (UnfinishedString, UnfinishedString)
@@ -139,6 +143,10 @@ impl TokenKind {
             | (_, LeftBrace)
             | (RightBrace, _)
             | (_, RightBrace)
+            | (LeftBracket, _)
+            | (_, LeftBracket)
+            | (RightBracket, _)
+            | (_, RightBracket)
             | (Number(_), _)
             | (_, Number(_))
             | (StaticString(_), _)
@@ -264,6 +272,8 @@ impl fmt::Display for TokenKind {
             RightParen => write!(f, ")"),
             LeftBrace => write!(f, "{{"),
             RightBrace => write!(f, "}}"),
+            LeftBracket => write!(f, "["),
+            RightBracket => write!(f, "]"),
 
             Op(op) => write!(f, "{}", op),
 

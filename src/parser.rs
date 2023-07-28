@@ -52,7 +52,7 @@ impl core::fmt::Display for ParseErrorKind {
                 "Max of {} function call arguments exceeded",
                 MAX_ARGUMENTS
             ),
-            UnexpectedToken(t) => write!(f, "Unexpected Token {}", t),
+            UnexpectedToken(t) => write!(f, "Unexpected Token `{}`", t),
             InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
             ScannerError(e) => write!(f, "Scanner Error {}", e),
         }
@@ -774,12 +774,10 @@ impl Parser {
             };
 
             conditional = match conditional {
-                Some(cond) => {
-                    Some(Expr {
-                        location: case.location.clone(),
-                        kind: ExprKind::LogicalOr(Box::new(eq_expr), Box::new(cond.clone())),
-                    })
-                }
+                Some(cond) => Some(Expr {
+                    location: case.location.clone(),
+                    kind: ExprKind::LogicalOr(Box::new(eq_expr), Box::new(cond.clone())),
+                }),
                 None => Some(eq_expr),
             };
         }
@@ -789,7 +787,11 @@ impl Parser {
             None => unreachable!(),
         };
 
-        Ok(Stmt::new(StmtKind::If(conditional, Box::new(Stmt::new(StmtKind::Block(body))), None)))
+        Ok(Stmt::new(StmtKind::If(
+            conditional,
+            Box::new(Stmt::new(StmtKind::Block(body))),
+            None,
+        )))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -868,6 +870,10 @@ impl Parser {
                 ExprKind::PropertyAccess(obj, name) => Expr {
                     location: expr.location,
                     kind: ExprKind::PropertyAssign(obj, name, r_expr),
+                },
+                ExprKind::Index(obj, index) => Expr {
+                    location: expr.location,
+                    kind: ExprKind::IndexAssign(obj, index, r_expr),
                 },
 
                 // TODO: Can we report and synchronize here?
@@ -985,6 +991,8 @@ impl Parser {
         loop {
             if self.check_advance(&[TokenKind::LeftParen]).is_some() {
                 expr = self.finish_call(expr)?;
+            } else if self.check_advance(&[TokenKind::LeftBracket]).is_some() {
+                expr = self.finish_index(expr)?;
             } else if self
                 .check_advance(&[TokenKind::Op(Operator::Dot)])
                 .is_some()
@@ -1031,6 +1039,17 @@ impl Parser {
         })
     }
 
+    fn finish_index(&mut self, callee: Expr) -> Result<Expr, ParseError> {
+        let index = Box::new(self.expression()?);
+
+        let t = self.consume_expected(&[TokenKind::RightBracket])?.unwrap();
+
+        Ok(Expr {
+            location: t.location.clone(),
+            kind: ExprKind::Index(Box::new(callee), index),
+        })
+    }
+
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let next_token = match self.peek() {
             Some(t) => t,
@@ -1062,6 +1081,28 @@ impl Parser {
                     Ok(Expr {
                         location,
                         kind: ExprKind::Grouping(Box::new(expr)),
+                    })
+                }
+                TokenKind::LeftBracket => {
+                    self.advance();
+
+                    let mut exprs = vec![];
+                    while !self.check(&[TokenKind::RightBracket]) && !self.is_at_end() {
+                        exprs.push(self.expression()?);
+
+                        if self
+                            .check_advance(&[TokenKind::Op(Operator::Comma)])
+                            .is_none()
+                        {
+                            break;
+                        }
+                    }
+
+                    self.consume_expected(&[TokenKind::RightBracket])?;
+
+                    Ok(Expr {
+                        location,
+                        kind: ExprKind::ArrayConstructor(exprs),
                     })
                 }
                 TokenKind::Reserved(ReservedWord::Fun) => {

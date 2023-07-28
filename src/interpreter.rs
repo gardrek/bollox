@@ -1099,6 +1099,67 @@ impl Interpreter {
 
                 Object::Callable(crate::object::Callable::Lox(method))
             }
+            ArrayConstructor(exprs) => {
+                let mut v = vec![];
+
+                for e in exprs {
+                    v.push(self.evaluate(e)?);
+                }
+
+                Object::Array(Rc::new(RefCell::new(v)))
+            }
+            Index(obj_expr, index) => {
+                let obj = self.evaluate(obj_expr)?;
+
+                let index = match self.evaluate(index)? {
+                    Object::Number(n) => {
+                        if n >= 0.0 {
+                            n as usize
+                        } else {
+                            todo!()
+                        }
+                    }
+                    _o => todo!(),
+                };
+
+                match obj {
+                    Object::Array(v) => {
+                        if index < v.borrow().len() {
+                            v.borrow()[index].clone()
+                        } else {
+                            Object::Nil
+                        }
+                    }
+                    _o => todo!(),
+                }
+            }
+            IndexAssign(obj_expr, index, val) => {
+                let obj = self.evaluate(obj_expr)?;
+
+                let index = match self.evaluate(index)? {
+                    Object::Number(n) => {
+                        if n >= 0.0 {
+                            n as usize
+                        } else {
+                            todo!()
+                        }
+                    }
+                    _o => todo!(),
+                };
+
+                match obj {
+                    Object::Array(v) => {
+                        if index < v.borrow().len() {
+                            let val = self.evaluate(val)?;
+                            v.borrow_mut()[index] = val.clone();
+                            val
+                        } else {
+                            todo!()
+                        }
+                    }
+                    _o => todo!(),
+                }
+            }
         })
     }
 }

@@ -1,0 +1,126 @@
+// Fucking Bollox
+
+var Iter = require("scripts/iter.blx");
+
+class ListNode {
+    init(value) {
+        this.value = value;
+        this.next = nil;
+        this.previous = nil;
+    }
+}
+
+class List {
+    init() {
+        this.head = nil;
+        this.tail = nil;
+    }
+
+    // Append value to the tail of the list.
+    append(value) {
+        var node = ListNode(value);
+        if this.head == nil {
+            this.head = node;
+            this.tail = node;
+        } else {
+            node.previous = this.tail;
+            this.tail.next = node;
+            this.tail = node;
+        }
+    }
+}
+
+var tape = List();
+var instructions = List();
+
+for i in Iter.range(0, 30000) {
+    tape.append(0);
+}
+
+while true {
+    var ch = getc();
+
+    if ch == -1 {
+        break;
+    } else switch chr(ch) {
+        "[", "]", ",", ".", "+", "-", "<", ">" {
+            instructions.append(chr(ch));
+        }
+    }
+}
+
+fun todo() {
+    print "TODO";
+}
+
+var tape_pointer = tape.head;
+var instruction_pointer = instructions.head;
+var buffered_output = "";
+
+while instruction_pointer {
+    var inst = instruction_pointer.value;
+    switch inst {
+        "+" {
+            tape_pointer.value = (tape_pointer.value + 1) % 256;
+        }
+        "-" {
+            tape_pointer.value = (tape_pointer.value - 1) % 256;
+        }
+        ">" {
+            tape_pointer = tape_pointer.next;
+        }
+        "<" {
+            tape_pointer = tape_pointer.previous;
+        }
+        "," {
+            tape_pointer.value = getc();
+        }
+        "." {
+            var c = tape_pointer.value;
+            if c == 10 {
+                print buffered_output;
+                buffered_output = "";
+            } else if c >= 0 and c <= 127 {
+                buffered_output += chr(c);
+            }
+        }
+        "[" {
+            if tape_pointer.value == 0 {
+                var depth = 0;
+                while instruction_pointer.next {
+                    instruction_pointer = instruction_pointer.next;
+                    if instruction_pointer.value == "[" {
+                        depth += 1;
+                    }
+                    if instruction_pointer.value == "]" {
+                        if depth == 0 {
+                            break;
+                        }
+                        depth -= 1;
+                    }
+                }
+            }
+        }
+        "]" {
+            if tape_pointer.value != 0 {
+                var depth = 0;
+                while instruction_pointer.previous {
+                    instruction_pointer = instruction_pointer.previous;
+                    if instruction_pointer.value == "]" {
+                        depth += 1;
+                    }
+                    if instruction_pointer.value == "[" {
+                        if depth == 0 {
+                            break;
+                        }
+                        depth -= 1;
+                    }
+                }
+            }
+        }
+    }
+    instruction_pointer = instruction_pointer.next;
+}
+
+if buffered_output != "" { print buffered_output; }
+

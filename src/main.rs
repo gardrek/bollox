@@ -199,10 +199,7 @@ pub fn run_string(
         Err(eor) => match eor {
             ErrorOrReturn::RuntimeError(e) => {
                 let src = source::Source::new(&source);
-                eprintln!(
-                    "error on line {:?}",
-                    src.get_line_number(&e.location),
-                );
+                eprintln!("error on line {:?}", src.get_line_number(&e.location),);
 
                 return Err(e.into());
             }
