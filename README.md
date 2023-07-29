@@ -138,6 +138,7 @@ Arrays:
 - `push(obj)` - Push `obj` onto the end of the array.
 - `pop()` - Pop an object off of the end of the array and returns it, or return nil if the array is empty.
 - `len()` - Returns the length of the array.
+- `clone()` - Returns a new array that is a shallow copy of this array.
 
 Strings:
 - `len()` - Returns the length of the string.
