@@ -110,27 +110,27 @@ Many error messages are quite different. Errors are not currently in the best sh
 
 ## Included Library Functions ##
 
-`clock()` - Returns the number of seconds since unix epoch.
+- `clock()` - Returns the number of seconds since unix epoch.
 
-`read()` - Reads a single line from stdin, trims the whitespace (including newlines) from the start and end, and returns it.
+- `read()` - Reads a single line from stdin, trims the whitespace (including newlines) from the start and end, and returns it.
 
-`to_string(value)` - Returns a string representing whatever value is passed in.
+- `to_string(value)` - Returns a string representing whatever value is passed in.
 
-`to_number(value)` - If the value is a number, returns it. if the value is a string which it can parse as a float, it returns the parsed number. otherwise, returns `nil`. Numbers are parsed according to [this Rust standard library function](https://doc.rust-lang.org/stable/std/primitive.f64.html#method.from_str).
+- `to_number(value)` - If the value is a number, returns it. if the value is a string which it can parse as a float, it returns the parsed number. otherwise, returns `nil`. Numbers are parsed according to [this Rust standard library function](https://doc.rust-lang.org/stable/std/primitive.f64.html#method.from_str).
 
-`require(filename)` - Run a script and return whatever that script returns (using a return statement in the top level)
+- `require(filename)` - Run a script and return whatever that script returns (using a return statement in the top level)
 
-`getc()` - Read a single byte from stdin and return it as an integer.
+- `getc()` - Read a single byte from stdin and return it as an integer.
 
-`putc(ch)` - Write a single byte to stdout.
+- `putc(ch)` - Write a single byte to stdout.
 
-`chr(ch)` - Convert given character code number to a single-character string.
+- `chr(ch)` - Convert given character code number to a single-character string.
 
-`exit(status)` - Exit with given status code.
+- `exit(status)` - Exit with given status code.
 
-`print_error(message)` - Print message string on stderr.
+- `print_error(message)` - Print message string on stderr.
 
-`typeof` - Returns a string describing the built-in type of an object, one of "Nil", "Boolean", "Number", "String", "NativeFunction", "Function", "Class", or "Array".
+- `typeof(obj)` - Returns a string describing the built-in type of any object `obj`. Returns one of "Nil", "Boolean", "Number", "String", "NativeFunction", "Function", "Class", or "Array".
 
 
 
