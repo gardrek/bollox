@@ -22,10 +22,9 @@ pub enum Object {
     Boolean(bool),
     Number(f64),
     String(StringKind),
-    Callable(Callable),
-    //~ NativeFunc(NativeFunction),
-    //~ LoxFunc(LoxFunction),
-    //~ Class(Rc<Class>),
+    NativeFunc(NativeFunction),
+    LoxFunc(LoxFunction),
+    Class(Rc<Class>),
     Instance(Rc<RefCell<Instance>>),
     Array(Rc<RefCell<Vec<Object>>>),
 }
@@ -57,6 +56,27 @@ impl Object {
             fields: HashMap::default(),
         })))
     }
+
+    pub fn arity(&self) -> Option<usize> {
+        use Object::*;
+        Some(match self {
+            NativeFunc(f) => f.arity,
+            LoxFunc(f) => f.parameters.len(),
+            Class(class) => {
+                let sym = {
+                    let mut interner = INTERNER.write().unwrap();
+                    interner.get_or_intern("init")
+                };
+
+                if let Some(f) = class.get_method(&sym) {
+                    f.parameters.len()
+                } else {
+                    0
+                }
+            }
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -64,13 +84,6 @@ pub enum StringKind {
     Dynamic(String),
     Static(Sym),
     Cat(Box<StringKind>, Box<StringKind>),
-}
-
-#[derive(Debug, Clone)]
-pub enum Callable {
-    Native(NativeFunction),
-    Lox(LoxFunction),
-    Class(Rc<Class>),
 }
 
 #[derive(Debug, Clone)]
@@ -146,28 +159,6 @@ pub struct NativeFunction {
     pub closure: Option<Rc<RefCell<Environment>>>,
 }
 
-impl Callable {
-    pub fn arity(&self) -> usize {
-        use Callable::*;
-        match self {
-            Native(f) => f.arity,
-            Lox(f) => f.parameters.len(),
-            Class(class) => {
-                let sym = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("init")
-                };
-
-                if let Some(f) = class.get_method(&sym) {
-                    f.parameters.len()
-                } else {
-                    0
-                }
-            }
-        }
-    }
-}
-
 impl StringKind {
     pub fn concat(self, other: Self) -> Self {
         use StringKind::*;
@@ -238,25 +229,6 @@ impl Object {
     */
 }
 
-impl PartialEq for Callable {
-    fn eq(&self, other: &Self) -> bool {
-        use Callable::*;
-        match (&self, &other) {
-            (Native(f), Native(g)) => f == g,
-            (Lox(f), Lox(g)) => f == g,
-            (Class(class_a), Class(class_b)) => Rc::ptr_eq(class_a, class_b),
-
-            #[allow(unreachable_patterns)]
-            (Native(_), _)
-            | (_, Native(_))
-            | (Lox(_), _)
-            | (_, Lox(_))
-            | (Class(_), _)
-            | (_, Class(_)) => false,
-        }
-    }
-}
-
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &Self) -> bool {
         // here's a hacky way to not have to add another Rc
@@ -287,7 +259,9 @@ impl PartialEq for Object {
                 | (Cat(_, _), _)
                 | (_, Cat(_, _)) => a_kind.to_string() == b_kind.to_string(),
             },
-            (Callable(a), Callable(b)) => a == b,
+            (NativeFunc(_a), NativeFunc(_b)) => false, // TODO: try to improve this?
+            (LoxFunc(a), LoxFunc(b)) => a == b,
+            (Class(rc_a), Class(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
             (Instance(rc_a), Instance(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
             (Array(rc_a), Array(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
 
@@ -300,8 +274,12 @@ impl PartialEq for Object {
             | (_, Number(_))
             | (String(_), _)
             | (_, String(_))
-            | (Callable(_), _)
-            | (_, Callable(_))
+            | (NativeFunc(_), _)
+            | (_, NativeFunc(_))
+            | (LoxFunc(_), _)
+            | (_, LoxFunc(_))
+            | (Class(_), _)
+            | (_, Class(_))
             | (Instance(_), _)
             | (_, Instance(_))
             | (Array(_), _)
@@ -336,7 +314,9 @@ impl fmt::Display for Object {
             Boolean(b) => write!(f, "{}", b),
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
-            Callable(c) => write!(f, "{}", c),
+            NativeFunc(func) => write!(f, "[built-in fun {}]", func.name),
+            LoxFunc(_func) => write!(f, "[fun]"),
+            Class(c) => write!(f, "[class {}]", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
             Array(vec) => {
                 write!(f, "[array")?;
@@ -345,17 +325,6 @@ impl fmt::Display for Object {
                 }
                 write!(f, "]")
             }
-        }
-    }
-}
-
-impl fmt::Display for Callable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Callable::*;
-        match self {
-            Native(func) => write!(f, "[built-in fun {}]", func.name),
-            Lox(_func) => write!(f, "[fun]"),
-            Class(c) => write!(f, "[class {}]", c),
         }
     }
 }
@@ -380,7 +349,9 @@ impl fmt::Debug for Object {
             Boolean(b) => write!(f, "{:?}", b),
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
-            Callable(c) => write!(f, "{}", c),
+            NativeFunc(func) => write!(f, "[built-in fun {}]", func.name),
+            LoxFunc(_func) => write!(f, "[fun]"),
+            Class(c) => write!(f, "[class {}]", c),
             Instance(inst) => write!(f, "[instance of {}]", inst.borrow().class),
             Array(vec) => {
                 write!(f, "[array")?;

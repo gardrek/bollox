@@ -1091,9 +1091,7 @@ impl Parser {
 
                     Ok(Expr {
                         location,
-                        kind: ExprKind::Literal(Object::Callable(crate::object::Callable::Lox(
-                            function,
-                        ))),
+                        kind: ExprKind::Literal(Object::LoxFunc(function)),
                     })
                 }
                 TokenKind::Reserved(ReservedWord::Super) => {

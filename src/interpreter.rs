@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind};
-use crate::object::Callable;
 use crate::object::NativeFunction;
 use crate::object::Object;
 use crate::source::SourceLocation;
@@ -430,7 +429,6 @@ impl Interpreter {
             |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
                 let obj = &args[0];
 
-                use crate::object::Callable::*;
                 use Object::*;
 
                 Ok(Object::dynamic_string(
@@ -439,11 +437,10 @@ impl Interpreter {
                         Boolean(_) => "Bool",
                         Number(_) => "Number",
                         String(_) => "String",
-                        Callable(callable) => match callable {
-                            Native(_) => "NativeFunction",
-                            Lox(_) => "Function",
-                            crate::object::Callable::Class(_) => "Class",
-                        },
+
+                        NativeFunc(_) => "NativeFunction",
+                        LoxFunc(_) => "Function",
+                        Class(_) => "Class",
                         Instance(_) => "Instance",
                         Array(_) => "Array",
                     }
@@ -474,12 +471,12 @@ impl Interpreter {
     ) {
         self.define_global(
             name,
-            Object::Callable(Callable::Native(NativeFunction {
+            Object::NativeFunc(NativeFunction {
                 name,
                 arity,
                 func,
                 closure: None,
-            })),
+            }),
         );
     }
 
@@ -779,7 +776,7 @@ impl Interpreter {
                         .borrow_mut()
                         .define(&super_name, superclass.clone());
 
-                    if let Object::Callable(Callable::Class(class)) = superclass {
+                    if let Object::Class(class) = superclass {
                         Some(class)
                     } else {
                         return Err(RuntimeError::type_error(
@@ -834,12 +831,12 @@ impl Interpreter {
                     associated_functions.insert(*name, new_func);
                 }
 
-                let obj = Object::Callable(Callable::Class(Rc::new(crate::object::Class {
+                let obj = Object::Class(Rc::new(crate::object::Class {
                     name: *name,
                     superclass,
                     methods,
                     associated_functions,
-                })));
+                }));
 
                 method_environment.borrow_mut().define(name, obj.clone());
 
@@ -855,7 +852,7 @@ impl Interpreter {
 
                 new_func.closure = closure.clone();
 
-                let obj = Object::Callable(Callable::Lox(new_func));
+                let obj = Object::LoxFunc(new_func);
                 closure.borrow_mut().define(name, obj.clone());
                 self.environment.borrow_mut().define(name, obj);
                 Object::Nil
@@ -936,31 +933,15 @@ impl Interpreter {
         (env, err)
     }
 
-    pub fn call_object(
+    fn call(
         &mut self,
         callee: &Object,
         arguments: Vec<Object>,
         location: SourceLocation,
     ) -> Result<Object, ErrorOrReturn> {
+        use Object::*;
         match callee {
-            Object::Callable(c) => self.call(c, arguments)?,
-            _ => {
-                return Err(
-                    RuntimeError::type_error("Attempt to call uncallable type", location).into(),
-                );
-            }
-        };
-        todo!()
-    }
-
-    pub fn call(
-        &mut self,
-        callee: &Callable,
-        arguments: Vec<Object>,
-    ) -> Result<Object, ErrorOrReturn> {
-        use Callable::*;
-        match callee {
-            Native(f) => match &f.closure {
+            NativeFunc(f) => match &f.closure {
                 Some(closure) => {
                     let call_environment = Environment::new_inner(closure.clone());
 
@@ -983,7 +964,7 @@ impl Interpreter {
                 }
                 None => (f.func)(self, arguments),
             },
-            Lox(f) => {
+            LoxFunc(f) => {
                 let closure = &f.closure;
 
                 let call_environment = Environment::new_inner(closure.clone());
@@ -1026,13 +1007,14 @@ impl Interpreter {
 
                     method.closure = new_env;
 
-                    let callable = crate::object::Callable::Lox(method);
+                    let callable = Object::LoxFunc(method);
 
-                    self.call(&callable, arguments)?;
+                    self.call(&callable, arguments, SourceLocation::bullshit())?;
                 }
 
                 Ok(instance)
             }
+            _ => Err(RuntimeError::type_error("Attempt to call uncallable type", location).into()),
         }
     }
 
@@ -1053,7 +1035,7 @@ impl Interpreter {
                 let mut method = method.clone();
 
                 let new_env = match method.closure {
-                    Some(closure) => Environment::new_inner(closure.clone()),
+                    Some(closure) => Environment::new_inner(closure),
                     None => Rc::new(RefCell::new(Environment::default())),
                 };
 
@@ -1066,7 +1048,7 @@ impl Interpreter {
 
                 method.closure = Some(new_env);
 
-                Ok(Object::Callable(crate::object::Callable::Native(method)))
+                Ok(Object::NativeFunc(method))
             } else {
                 Err(RuntimeError::type_error("Cannot access property", location).into())
             }
@@ -1081,14 +1063,14 @@ impl Interpreter {
         use Operator::*;
         Ok(match &expr.kind {
             Literal(literal) => match literal {
-                Callable(crate::object::Callable::Lox(func)) => {
+                Object::LoxFunc(func) => {
                     let closure = self.create_closure();
 
                     let mut new_func = func.clone();
 
                     new_func.closure = closure;
 
-                    Object::Callable(crate::object::Callable::Lox(new_func))
+                    Object::LoxFunc(new_func)
                 }
                 _ => literal.clone(),
             },
@@ -1348,18 +1330,14 @@ impl Interpreter {
                     evaluated_args.push(self.evaluate(a)?);
                 }
 
-                let callee = match callee {
-                    Callable(c) => c,
-                    _ => {
-                        return Err(RuntimeError::type_error(
-                            "Attempt to call uncallable type",
-                            location,
-                        )
-                        .into());
+                let arity = match callee.arity() {
+                    Some(a) => a,
+                    None => {
+                        return Err(RuntimeError::ice("callee not a callable type", location).into())
                     }
                 };
 
-                if callee.arity() != evaluated_args.len() {
+                if arity != evaluated_args.len() {
                     return Err(RuntimeError::type_error(
                         "Incorrect number of arguments",
                         location,
@@ -1367,7 +1345,7 @@ impl Interpreter {
                     .into());
                 }
 
-                self.call(&callee, evaluated_args)?
+                self.call(&callee, evaluated_args, location)?
             }
             PropertyAccess(obj_expr, name) => {
                 let location = obj_expr.location.clone();
@@ -1390,7 +1368,7 @@ impl Interpreter {
 
                                 method.closure = new_env;
 
-                                Object::Callable(crate::object::Callable::Lox(method))
+                                Object::LoxFunc(method)
                             }
                             None => {
                                 return Err(RuntimeError::type_error(
@@ -1401,18 +1379,16 @@ impl Interpreter {
                             }
                         },
                     },
-                    Callable(crate::object::Callable::Class(class)) => {
-                        match class.get_function(name) {
-                            Some(f) => Object::Callable(crate::object::Callable::Lox(f)),
-                            None => {
-                                return Err(RuntimeError::type_error(
-                                    "Cannot access nonexistent associated function",
-                                    location,
-                                )
-                                .into())
-                            }
+                    Class(class) => match class.get_function(name) {
+                        Some(f) => Object::LoxFunc(f),
+                        None => {
+                            return Err(RuntimeError::type_error(
+                                "Cannot access nonexistent associated function",
+                                location,
+                            )
+                            .into())
                         }
-                    }
+                    },
                     Array(_) => self.access_native_method("Array", obj.clone(), name, location)?,
                     String(_) => {
                         self.access_native_method("String", obj.clone(), name, location)?
@@ -1472,18 +1448,17 @@ impl Interpreter {
                     .get_binding(&this_name)
                     .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?;
 
-                let mut method =
-                    if let Object::Callable(crate::object::Callable::Class(class)) = class {
-                        class
-                            .get_method(method_name)
-                            .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
-                    } else {
-                        return Err(RuntimeError::ice(
-                            "super is not a class. bad syntax tree",
-                            expr.location.clone(),
-                        )
-                        .into());
-                    };
+                let mut method = if let Object::Class(class) = class {
+                    class
+                        .get_method(method_name)
+                        .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
+                } else {
+                    return Err(RuntimeError::ice(
+                        "super is not a class. bad syntax tree",
+                        expr.location.clone(),
+                    )
+                    .into());
+                };
 
                 let new_env = Environment::new_inner(method.closure.clone());
 
@@ -1491,7 +1466,7 @@ impl Interpreter {
 
                 method.closure = new_env;
 
-                Object::Callable(crate::object::Callable::Lox(method))
+                Object::LoxFunc(method)
             }
             ArrayConstructor(exprs) => {
                 let mut v = vec![];

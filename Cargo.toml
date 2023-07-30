@@ -4,6 +4,9 @@ version = "0.2.0"
 authors = ["gardrek <gardrek.the.destroyer@gmail.com>"]
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 source-span = "2.7.0"
 string-interner = "0.7.1"
