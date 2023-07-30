@@ -186,6 +186,20 @@ impl Parser {
         }
     }
 
+    fn advance_if_match(&mut self, kind: TokenKind) -> bool {
+        match self.peek() {
+            Some(t) => {
+                if t.kind.same_kind(&kind) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        }
+    }
+
     fn peek_previous(&self) -> Option<&Token> {
         self.previous.as_ref()
     }
@@ -203,14 +217,6 @@ impl Parser {
     }
 
     fn consume_expected(&mut self, kinds: &[TokenKind]) -> Result<Option<&Token>, ParseError> {
-        /*if self.check(kinds) {
-            Ok(self.advance())
-        } else {
-            Err(self.error(ParseErrorKind::ExpectedToken(
-                kinds.to_owned(),
-                self.peek().cloned(),
-            )))
-        }*/
         self.consume(
             kinds,
             ParseErrorKind::ExpectedToken(kinds.to_owned(), self.peek().cloned()),
@@ -275,8 +281,8 @@ impl Parser {
         let mut expr = get_argument(self)?;
         let mut location = expr.location.clone();
 
-        while self.check_advance(kinds).is_some() {
-            let op_token = self.peek_previous().unwrap();
+        while let Some(op_token) = self.check_advance(kinds) {
+            //~ let op_token = self.peek_previous().unwrap();
             location = location.combine(&op_token.location);
             let op = op_token.to_operator();
             let right = get_argument(self)?;
@@ -295,25 +301,23 @@ impl Parser {
 /// Most of the following functions each represent one rule of the language's grammar
 impl Parser {
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
-        if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Class)])
-            .is_some()
-        {
-            return self.class_declaration();
-        }
-
-        if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Fun)])
-            .is_some()
-        {
-            return self.function_declaration();
-        }
-
-        if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
-            .is_some()
-        {
-            return self.variable_declaration();
+        if let Some(token) = self.check_advance(&[
+            TokenKind::Reserved(ReservedWord::Class),
+            TokenKind::Reserved(ReservedWord::Fun),
+            TokenKind::Reserved(ReservedWord::Var),
+        ]) {
+            return match &token.kind {
+                TokenKind::Reserved(word) => {
+                    use ReservedWord::*;
+                    match word {
+                        Class => self.class_declaration(),
+                        Fun => self.function_declaration(),
+                        Var => self.variable_declaration(),
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            };
         }
 
         self.statement()
@@ -322,10 +326,7 @@ impl Parser {
     fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume_identifier()?;
 
-        let superclass = if self
-            .check_advance(&[TokenKind::Op(Operator::Less)])
-            .is_some()
-        {
+        let superclass = if self.advance_if_match(TokenKind::Op(Operator::Less)) {
             let name = self.consume_identifier()?;
 
             Some(name)
@@ -339,10 +340,7 @@ impl Parser {
         let mut associated_funcs = vec![];
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
-            if self
-                .check_advance(&[TokenKind::Reserved(ReservedWord::Class)])
-                .is_some()
-            {
+            if self.advance_if_match(TokenKind::Reserved(ReservedWord::Class)) {
                 associated_funcs.push(self.function_declaration()?);
             } else {
                 methods.push(self.function_declaration()?);
@@ -377,10 +375,7 @@ impl Parser {
             loop {
                 parameters.push(self.consume_identifier()?);
 
-                if self
-                    .check_advance(&[TokenKind::Op(Operator::Comma)])
-                    .is_none()
-                {
+                if !self.advance_if_match(TokenKind::Op(Operator::Comma)) {
                     break;
                 }
             }
@@ -414,10 +409,7 @@ impl Parser {
 
         self.advance();
 
-        let initializer = if self
-            .check_advance(&[TokenKind::Op(Operator::Equal)])
-            .is_some()
-        {
+        let initializer = if self.advance_if_match(TokenKind::Op(Operator::Equal)) {
             Some(self.expression()?)
         } else {
             None
@@ -430,8 +422,8 @@ impl Parser {
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
         if let Some(token) = self.check_advance(&[
-            TokenKind::Reserved(ReservedWord::For),
             TokenKind::Reserved(ReservedWord::Break),
+            TokenKind::Reserved(ReservedWord::For),
             TokenKind::Reserved(ReservedWord::If),
             TokenKind::Reserved(ReservedWord::Print),
             TokenKind::Reserved(ReservedWord::Return),
@@ -456,7 +448,7 @@ impl Parser {
             };
         }
 
-        if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+        if self.advance_if_match(TokenKind::LeftBrace) {
             return Ok(Stmt::new(StmtKind::Block(self.block()?)));
         }
 
@@ -480,15 +472,9 @@ impl Parser {
     fn c_style_for_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume_expected(&[TokenKind::LeftParen])?;
 
-        let initializer = if self
-            .check_advance(&[TokenKind::Op(Operator::Semicolon)])
-            .is_some()
-        {
+        let initializer = if self.advance_if_match(TokenKind::Op(Operator::Semicolon)) {
             None
-        } else if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Var)])
-            .is_some()
-        {
+        } else if self.advance_if_match(TokenKind::Reserved(ReservedWord::Var)) {
             Some(self.variable_declaration()?)
         } else {
             Some(self.expression_statement()?)
@@ -545,7 +531,7 @@ impl Parser {
 
         let iter_expr = self.expression()?;
 
-        let body = if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+        let body = if self.advance_if_match(TokenKind::LeftBrace) {
             Box::new(Stmt::new(StmtKind::Block(self.block()?)))
         } else {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
@@ -609,7 +595,7 @@ impl Parser {
         let then_block = match condition.kind {
             ExprKind::Grouping(_) => Box::new(self.statement()?),
             _ => {
-                if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+                if self.advance_if_match(TokenKind::LeftBrace) {
                     Box::new(Stmt::new(StmtKind::Block(self.block()?)))
                 } else {
                     return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
@@ -617,16 +603,10 @@ impl Parser {
             }
         };
 
-        let else_block = if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
-            .is_some()
-        {
-            if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+        let else_block = if self.advance_if_match(TokenKind::Reserved(ReservedWord::Else)) {
+            if self.advance_if_match(TokenKind::LeftBrace) {
                 Some(Box::new(Stmt::new(StmtKind::Block(self.block()?))))
-            } else if self
-                .check_advance(&[TokenKind::Reserved(ReservedWord::If)])
-                .is_some()
-            {
+            } else if self.advance_if_match(TokenKind::Reserved(ReservedWord::If)) {
                 Some(Box::new(self.if_statement()?))
             } else {
                 Some(Box::new(self.statement()?))
@@ -683,7 +663,7 @@ impl Parser {
         let subject_declaration =
             Stmt::new(StmtKind::VariableDeclaration(subject_name, Some(subject)));
 
-        if self.check_advance(&[TokenKind::LeftBrace]).is_none() {
+        if !self.advance_if_match(TokenKind::LeftBrace) {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         }
 
@@ -699,10 +679,7 @@ impl Parser {
             branches.push(branch);
         }
 
-        let else_branch = if self
-            .check_advance(&[TokenKind::Reserved(ReservedWord::Else)])
-            .is_some()
-        {
+        let else_branch = if self.advance_if_match(TokenKind::Reserved(ReservedWord::Else)) {
             self.consume_expected(&[TokenKind::LeftBrace])?;
 
             let body = Box::new(Stmt::new(StmtKind::Block(self.block()?)));
@@ -749,10 +726,7 @@ impl Parser {
         while !self.check(&[TokenKind::LeftBrace]) && !self.is_at_end() {
             cases.push(self.expression()?);
 
-            if self
-                .check_advance(&[TokenKind::Op(Operator::Comma)])
-                .is_none()
-            {
+            if !self.advance_if_match(TokenKind::Op(Operator::Comma)) {
                 break;
             }
         }
@@ -802,7 +776,7 @@ impl Parser {
         let body = match condition.kind {
             ExprKind::Grouping(_) => Box::new(self.statement()?),
             _ => {
-                if self.check_advance(&[TokenKind::LeftBrace]).is_some() {
+                if self.advance_if_match(TokenKind::LeftBrace) {
                     Box::new(Stmt::new(StmtKind::Block(self.block()?)))
                 } else {
                     return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
@@ -964,19 +938,15 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, ParseError> {
-        if self
-            .check_advance(&[
-                TokenKind::Op(Operator::Bang),
-                TokenKind::Op(Operator::Minus),
-            ])
-            .is_some()
-        {
-            let op_token = self.peek_previous().unwrap();
-            let mut location = op_token.location.clone();
+        if let Some(op_token) = self.check_advance(&[
+            TokenKind::Op(Operator::Bang),
+            TokenKind::Op(Operator::Minus),
+        ]) {
+            let op_location = op_token.location.clone();
             let op = op_token.to_operator();
 
             let right = self.unary()?;
-            location = location.combine(&right.location);
+            let location = op_location.combine(&right.location);
 
             return Ok(Expr {
                 location,
@@ -991,14 +961,11 @@ impl Parser {
         let mut expr = self.primary()?;
 
         loop {
-            if self.check_advance(&[TokenKind::LeftParen]).is_some() {
+            if self.advance_if_match(TokenKind::LeftParen) {
                 expr = self.finish_call(expr)?;
-            } else if self.check_advance(&[TokenKind::LeftBracket]).is_some() {
+            } else if self.advance_if_match(TokenKind::LeftBracket) {
                 expr = self.finish_index(expr)?;
-            } else if self
-                .check_advance(&[TokenKind::Op(Operator::Dot)])
-                .is_some()
-            {
+            } else if self.advance_if_match(TokenKind::Op(Operator::Dot)) {
                 let name = self.consume_identifier()?;
 
                 expr = Expr {
@@ -1020,10 +987,7 @@ impl Parser {
             loop {
                 arguments.push(self.expression()?);
 
-                if self
-                    .check_advance(&[TokenKind::Op(Operator::Comma)])
-                    .is_none()
-                {
+                if !self.advance_if_match(TokenKind::Op(Operator::Comma)) {
                     break;
                 }
             }
@@ -1058,9 +1022,9 @@ impl Parser {
             None => return Err(self.error(ParseErrorKind::Ice("Unexpected end of Token stream"))),
         };
 
-        if next_token.is_object() {
-            let location = next_token.location.clone();
+        let location = next_token.location.clone();
 
+        if next_token.is_object() {
             let literal = Object::from_token(next_token).unwrap();
 
             self.advance();
@@ -1070,8 +1034,6 @@ impl Parser {
                 kind: ExprKind::Literal(literal),
             })
         } else {
-            let location = next_token.location.clone();
-
             match next_token.kind {
                 TokenKind::LeftParen => {
                     self.advance();
@@ -1092,18 +1054,12 @@ impl Parser {
                     while !self.check(&[TokenKind::RightBracket]) && !self.is_at_end() {
                         exprs.push(self.expression()?);
 
-                        if self
-                            .check_advance(&[TokenKind::Op(Operator::Comma)])
-                            .is_none()
-                        {
+                        if !self.advance_if_match(TokenKind::Op(Operator::Comma)) {
                             break;
                         }
                     }
 
-                    if self
-                        .check_advance(&[TokenKind::Op(Operator::Semicolon)])
-                        .is_some()
-                    {
+                    if self.advance_if_match(TokenKind::Op(Operator::Semicolon)) {
                         let multiplier = self.expression()?;
 
                         if exprs.len() == 1 {

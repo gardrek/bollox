@@ -1,0 +1,29 @@
+
+var a = [-1, 0, 10 + 40, 10000, 0.4];
+
+print a[1];
+
+a[1] = 5;
+
+print a[5];
+
+var x = [0; 100];
+
+print x[99];
+
+print getc;
+
+print a.len();
+print a.pop();
+print a.len();
+print a.push(100);
+print a.len();
+
+for f in a.clone().pop {
+    print f;
+}
+
+print a;
+
+print "#334".len();
+

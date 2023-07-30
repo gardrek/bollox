@@ -344,7 +344,7 @@ impl Interpreter {
                             let c = *c as u8 as char;
                             print!("{}", c);
                             std::io::stdout().flush().unwrap();
-                            todo!()
+                            Ok(Object::nil())
                         } else {
                             todo!()
                         }
@@ -424,6 +424,34 @@ impl Interpreter {
             },
         );
 
+        self.define_global_function(
+            "typeof",
+            1,
+            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
+                let obj = &args[0];
+
+                use crate::object::Callable::*;
+                use Object::*;
+
+                Ok(Object::dynamic_string(
+                    match obj {
+                        Nil => "Nil",
+                        Boolean(_) => "Bool",
+                        Number(_) => "Number",
+                        String(_) => "String",
+                        Callable(callable) => match callable {
+                            Native(_) => "NativeFunction",
+                            Lox(_) => "Function",
+                            crate::object::Callable::Class(_) => "Class",
+                        },
+                        Instance(_) => "Instance",
+                        Array(_) => "Array",
+                    }
+                    .to_string(),
+                ))
+            },
+        );
+
         /*
         self.define_global_function("test", 0, |
             _interpreter: &mut Interpreter,
@@ -468,7 +496,7 @@ impl Interpreter {
 
         let mut native_methods = NativeMethods::default();
 
-        // String.len()
+        // string.len()
 
         native_methods.add_method(
             "len",
@@ -498,6 +526,44 @@ impl Interpreter {
                     )
                     .into()),
                 }
+            },
+        );
+
+        // string.to_number()
+
+        native_methods.add_method(
+            "to_number",
+            0,
+            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
+                let this_name = {
+                    let mut interner = INTERNER.write().unwrap();
+                    interner.get_or_intern("this")
+                };
+
+                let this = match interpreter.get_binding(&this_name) {
+                    Some(o) => o,
+                    None => {
+                        return Err(RuntimeError::ice(
+                            "`this` not defined for method",
+                            SourceLocation::bullshit(),
+                        )
+                        .into())
+                    }
+                };
+
+                Ok(match this {
+                    Object::String(s) => match s.to_string().parse::<f64>() {
+                        Ok(n) => Object::Number(n),
+                        Err(_) => Object::Nil,
+                    },
+                    _ => {
+                        return Err(RuntimeError::ice(
+                            "`this` not a string for string method",
+                            SourceLocation::bullshit(),
+                        )
+                        .into())
+                    }
+                })
             },
         );
 

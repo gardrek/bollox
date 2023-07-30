@@ -1,4 +1,4 @@
-`bollox` is my attempt at a Lox interpreter, written in Rust. It is based on the first interpreter described by the book Crafting Interpreters. That interpreter was written in Java, so a good deal of changes have been made to the structure to make it more "Rusty".
+`bollox` is a Lox interpreter, written in Rust, with various feature extensions. It is based on the first interpreter described by the book Crafting Interpreters. That interpreter was written in Java, so a good deal of changes have been made to the structure to make it more "Rusty".
 
 
 
@@ -14,7 +14,7 @@
 
 # Differences compared to standard Lox #
 
-`if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition. For compatibility reasons, if the condition begins with parenthesis, you may have to put extra parenthesis around it.
+`if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 
 Except in compatibility mode, closures make a copy of the environment rather than taking reference. This eliminates the ability to use variables that haven't been declared yet when the function is declared.
 
@@ -122,11 +122,15 @@ Many error messages are quite different. Errors are not currently in the best sh
 
 `getc()` - Read a single byte from stdin and return it as an integer.
 
+`putc(ch)` - Write a single byte to stdout.
+
 `chr(ch)` - Convert given character code number to a single-character string.
 
 `exit(status)` - Exit with given status code.
 
 `print_error(message)` - Print message string on stderr.
+
+`typeof` - Returns a string describing the built-in type of an object, one of "Nil", "Boolean", "Number", "String", "NativeFunction", "Function", "Class", or "Array".
 
 
 
@@ -142,3 +146,4 @@ Arrays:
 
 Strings:
 - `len()` - Returns the length of the string.
+- `to_number()` - Returns the string parsed as a number, or `nil` if it can't be parsed as such. String is parsed according to [this Rust standard library function](https://doc.rust-lang.org/stable/std/primitive.f64.html#method.from_str).

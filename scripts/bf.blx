@@ -49,10 +49,6 @@ while true {
     }
 }
 
-fun todo() {
-    print "TODO";
-}
-
 var tape_pointer = tape.head;
 var instruction_pointer = instructions.head;
 var buffered_output = "";
@@ -77,12 +73,15 @@ while instruction_pointer {
         }
         "." {
             var c = tape_pointer.value;
+            /*
             if c == 10 {
                 print buffered_output;
                 buffered_output = "";
             } else if c >= 0 and c <= 127 {
                 buffered_output += chr(c);
             }
+            */
+            putc(c);
         }
         "[" {
             if tape_pointer.value == 0 {
