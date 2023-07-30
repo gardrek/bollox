@@ -23,9 +23,9 @@ pub enum Object {
     Number(f64),
     String(StringKind),
     Callable(Callable),
-    NativeFunc(NativeFunction),
-    LoxFunc(LoxFunction),
-    Class(Rc<Class>),
+    //~ NativeFunc(NativeFunction),
+    //~ LoxFunc(LoxFunction),
+    //~ Class(Rc<Class>),
     Instance(Rc<RefCell<Instance>>),
     Array(Rc<RefCell<Vec<Object>>>),
 }
