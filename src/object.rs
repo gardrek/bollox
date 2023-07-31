@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+use crate::interpreter::ControlFlow;
 use crate::interpreter::Environment;
-use crate::interpreter::ErrorOrReturn;
 use crate::interpreter::Interpreter;
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
@@ -155,7 +155,7 @@ pub struct LoxFunction {
 pub struct NativeFunction {
     pub name: &'static str,
     pub arity: usize,
-    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
+    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
     pub closure: Option<Rc<RefCell<Environment>>>,
 }
 

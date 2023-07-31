@@ -14,7 +14,9 @@ pub mod result;
 pub mod scanner;
 pub mod token;
 
-use interpreter::ErrorOrReturn;
+mod stdlib;
+
+use interpreter::ControlFlow;
 use interpreter::Interpreter;
 use parser::Parser;
 use result::Result;
@@ -68,22 +70,19 @@ pub fn run_string(
         return Ok(None);
     }
 
-    let mut interpreter = Interpreter::new(compatibility_mode);
-
-    interpreter.init_global_environment();
-    interpreter.init_native_methods();
+    let mut interpreter = Interpreter::new_with_stdlib(compatibility_mode);
 
     let obj = match interpreter.interpret_slice(&statements[..]) {
         Ok(obj) => obj,
         Err(eor) => match eor {
-            ErrorOrReturn::RuntimeError(e) => {
+            ControlFlow::RuntimeError(e) => {
                 let src = source::Source::new(&source);
                 eprintln!("error on line {:?}", src.get_line_number(&e.location),);
 
                 return Err(e.into());
             }
-            ErrorOrReturn::Return(v) => v,
-            ErrorOrReturn::Break(_v) => return Err(result::Error::BreakOutsideLoop),
+            ControlFlow::Return(v) => v,
+            ControlFlow::Break(_v) => return Err(result::Error::BreakOutsideLoop),
         },
     };
 

@@ -120,20 +120,20 @@ pub struct Interpreter {
     compatibility_mode: bool,
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
-    native_methods: HashMap<Sym, NativeMethods>,
+    pub native_methods: HashMap<Sym, NativeClass>,
 }
 
 #[derive(Default)]
-struct NativeMethods {
+pub struct NativeClass {
     pub methods: HashMap<Sym, NativeFunction>,
 }
 
-impl NativeMethods {
-    fn add_method(
+impl NativeClass {
+    pub fn add_method(
         &mut self,
         name: &'static str,
         arity: usize,
-        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
+        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
     ) {
         let name_sym = {
             let mut interner = INTERNER.write().unwrap();
@@ -224,6 +224,28 @@ impl Environment {
             None => next_bindings,
         }
     }
+
+    pub fn define_native_function(
+        &mut self,
+        name: &'static str,
+        arity: usize,
+        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
+    ) {
+        let sym_name = {
+            let mut interner = INTERNER.write().unwrap();
+            interner.get_or_intern(name)
+        };
+
+        self.define(
+            &sym_name,
+            Object::NativeFunc(NativeFunction {
+                name,
+                arity,
+                func,
+                closure: None,
+            }),
+        );
+    }
 }
 
 impl Interpreter {
@@ -234,7 +256,24 @@ impl Interpreter {
         }
     }
 
-    fn get_binding(&self, sym: &Sym) -> Option<Object> {
+    pub fn new_with_stdlib(compatibility_mode: bool) -> Interpreter {
+        let mut globals = Environment::default();
+        crate::stdlib::init_global_environment(&mut globals);
+
+        let mut interpreter = Interpreter {
+            compatibility_mode,
+            globals: Rc::new(RefCell::new(globals)),
+            ..Interpreter::default()
+        };
+
+        crate::stdlib::init_number_native_methods(&mut interpreter);
+        crate::stdlib::init_string_native_methods(&mut interpreter);
+        crate::stdlib::init_array_native_methods(&mut interpreter);
+
+        interpreter
+    }
+
+    pub fn get_binding(&self, sym: &Sym) -> Option<Object> {
         let env = self.globals.borrow();
         let obj = env.bindings.get(sym);
 
@@ -254,484 +293,6 @@ impl Interpreter {
         }
     }
 
-    pub fn init_global_environment(&mut self) {
-        self.define_global_function(
-            "clock",
-            0,
-            |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                use std::time::{SystemTime, UNIX_EPOCH};
-
-                Ok(Object::Number(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_millis() as f64
-                        / 1000.0,
-                ))
-            },
-        );
-
-        self.define_global_function(
-            "read",
-            0,
-            |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                use std::io::{self, BufRead};
-
-                let mut line = String::new();
-                let stdin = io::stdin();
-                stdin.lock().read_line(&mut line).unwrap();
-                let line = line.trim().to_string();
-
-                Ok(Object::String(crate::object::StringKind::Dynamic(line)))
-            },
-        );
-
-        self.define_global_function(
-            "to_string",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                let s = format!("{}", obj);
-
-                Ok(Object::dynamic_string(s))
-            },
-        );
-
-        self.define_global_function(
-            "to_number",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                Ok(match obj {
-                    Object::Number(_) => obj.clone(),
-                    Object::String(s) => match s.to_string().parse::<f64>() {
-                        Ok(n) => Object::Number(n),
-                        Err(_) => Object::Nil,
-                    },
-                    _ => Object::Nil,
-                })
-            },
-        );
-
-        self.define_global_function(
-            "getc",
-            0,
-            |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                use std::io::Read;
-                match std::io::stdin().bytes().next() {
-                    Some(r) => match r {
-                        Ok(n) => Ok(Object::Number(n as f64)),
-                        Err(_e) => Ok(Object::Number(-1.0)),
-                    },
-                    None => Ok(Object::Number(-1.0)),
-                }
-            },
-        );
-
-        self.define_global_function(
-            "putc",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                use std::io::Write;
-                match obj {
-                    Object::Number(c) => {
-                        if *c >= 0.0 && *c < 256.0 {
-                            let c = *c as u8 as char;
-                            print!("{}", c);
-                            std::io::stdout().flush().unwrap();
-                            Ok(Object::nil())
-                        } else {
-                            todo!()
-                        }
-                    }
-                    _ => todo!(),
-                }
-            },
-        );
-
-        self.define_global_function(
-            "chr",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                Ok(match obj {
-                    Object::Number(n) => Object::dynamic_string(
-                        std::str::from_utf8(&[*n as u8]).unwrap().to_string(),
-                    ),
-                    _ => Object::Nil,
-                })
-            },
-        );
-
-        self.define_global_function(
-            "exit",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                match obj {
-                    Object::Number(n) => std::process::exit(*n as i32),
-                    _ => std::process::exit(0),
-                }
-            },
-        );
-
-        self.define_global_function(
-            "print_error",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let message = &args[0];
-
-                eprintln!("{}", message);
-
-                Ok(Object::Nil)
-            },
-        );
-
-        self.define_global_function(
-            "require",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let filename_obj = &args[0];
-
-                match filename_obj {
-                    Object::String(s) => {
-                        let filename = s.to_string();
-
-                        let source = std::fs::read_to_string(filename).unwrap();
-
-                        let result = crate::run_string(source.clone(), 0, false);
-
-                        match result {
-                            Ok(obj) => Ok(obj.unwrap()),
-                            Err(e) => {
-                                eprintln!(
-                                    "error on line {:?}",
-                                    crate::source::SourceLocation::error_line_number(&e, &source)
-                                );
-                                panic!()
-                            }
-                        }
-                    }
-                    _ => Ok(Object::Nil),
-                }
-            },
-        );
-
-        self.define_global_function(
-            "typeof",
-            1,
-            |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                use Object::*;
-
-                Ok(Object::dynamic_string(
-                    match obj {
-                        Nil => "Nil",
-                        Boolean(_) => "Bool",
-                        Number(_) => "Number",
-                        String(_) => "String",
-
-                        NativeFunc(_) => "NativeFunction",
-                        LoxFunc(_) => "Function",
-                        Class(_) => "Class",
-                        Instance(_) => "Instance",
-                        Array(_) => "Array",
-                    }
-                    .to_string(),
-                ))
-            },
-        );
-
-        /*
-        self.define_global_function("test", 0, |
-            _interpreter: &mut Interpreter,
-            _args: Vec<Object>,
-        | -> Result<Object, ErrorOrReturn> {
-            let s = "string";
-
-            let b = Object::dynamic_string(s.to_string()) == Object::static_string_from_str(s);
-
-            Ok(Object::Boolean(b))
-        });
-        */
-    }
-
-    fn define_global_function(
-        &mut self,
-        name: &'static str,
-        arity: usize,
-        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ErrorOrReturn>,
-    ) {
-        self.define_global(
-            name,
-            Object::NativeFunc(NativeFunction {
-                name,
-                arity,
-                func,
-                closure: None,
-            }),
-        );
-    }
-
-    pub fn init_native_methods(&mut self) {
-        self.init_string_native_methods();
-        self.init_array_native_methods();
-    }
-
-    pub fn init_string_native_methods(&mut self) {
-        let class_name = {
-            let mut interner = INTERNER.write().unwrap();
-            interner.get_or_intern("String")
-        };
-
-        let mut native_methods = NativeMethods::default();
-
-        // string.len()
-
-        native_methods.add_method(
-            "len",
-            0,
-            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                match this {
-                    Object::String(s) => Ok(Object::Number(s.to_string().len() as f64)),
-                    _ => Err(RuntimeError::ice(
-                        "`this` not a string for string method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into()),
-                }
-            },
-        );
-
-        // string.to_number()
-
-        native_methods.add_method(
-            "to_number",
-            0,
-            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                Ok(match this {
-                    Object::String(s) => match s.to_string().parse::<f64>() {
-                        Ok(n) => Object::Number(n),
-                        Err(_) => Object::Nil,
-                    },
-                    _ => {
-                        return Err(RuntimeError::ice(
-                            "`this` not a string for string method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                })
-            },
-        );
-
-        //
-
-        self.native_methods.insert(class_name, native_methods);
-    }
-
-    pub fn init_array_native_methods(&mut self) {
-        let class_name = {
-            let mut interner = INTERNER.write().unwrap();
-            interner.get_or_intern("Array")
-        };
-
-        let mut native_methods = NativeMethods::default();
-
-        // Array.len()
-
-        native_methods.add_method(
-            "len",
-            0,
-            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                match this {
-                    Object::Array(v) => Ok(Object::Number(v.borrow().len() as f64)),
-                    _ => Err(RuntimeError::ice(
-                        "`this` not an array for array method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into()),
-                }
-            },
-        );
-
-        // Array.push(obj)
-
-        native_methods.add_method(
-            "push",
-            1,
-            |interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let obj = &args[0];
-
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                match this {
-                    Object::Array(v) => {
-                        v.borrow_mut().push(obj.clone());
-                        Ok(Object::nil())
-                    }
-                    _ => Err(RuntimeError::ice(
-                        "`this` not an array for array method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into()),
-                }
-            },
-        );
-
-        // Array.pop()
-
-        native_methods.add_method(
-            "pop",
-            0,
-            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                match this {
-                    Object::Array(v) => Ok(match v.borrow_mut().pop() {
-                        Some(o) => o,
-                        None => Object::nil(),
-                    }),
-                    _ => Err(RuntimeError::ice(
-                        "`this` not an array for array method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into()),
-                }
-            },
-        );
-
-        // Array.clone()
-
-        native_methods.add_method(
-            "clone",
-            0,
-            |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ErrorOrReturn> {
-                let this_name = {
-                    let mut interner = INTERNER.write().unwrap();
-                    interner.get_or_intern("this")
-                };
-
-                let this = match interpreter.get_binding(&this_name) {
-                    Some(o) => o,
-                    None => {
-                        return Err(RuntimeError::ice(
-                            "`this` not defined for method",
-                            SourceLocation::bullshit(),
-                        )
-                        .into())
-                    }
-                };
-
-                match this {
-                    Object::Array(v) => {
-                        Ok(Object::Array(Rc::new(RefCell::new(v.borrow().clone()))))
-                    }
-                    _ => Err(RuntimeError::ice(
-                        "`this` not an array for array method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into()),
-                }
-            },
-        );
-
-        //
-
-        self.native_methods.insert(class_name, native_methods);
-    }
-
-    fn define_global(&mut self, name: &'static str, obj: Object) {
-        let mut interner = INTERNER.write().unwrap();
-
-        let sym = interner.get_or_intern(name);
-
-        self.globals.borrow_mut().define(&sym, obj);
-    }
-
     pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
         if self.compatibility_mode {
             Environment::new_inner(self.environment.clone())
@@ -740,7 +301,7 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ErrorOrReturn> {
+    pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ControlFlow> {
         use StmtKind::*;
         Ok(match &statement.kind {
             Block(stmts) => {
@@ -754,7 +315,7 @@ impl Interpreter {
                 Object::Nil
             }
             Break(expr) => {
-                return Err(ErrorOrReturn::Break(match expr {
+                return Err(ControlFlow::Break(match expr {
                     Some(e) => Some(self.evaluate(e)?),
                     None => None,
                 }));
@@ -870,7 +431,7 @@ impl Interpreter {
                 Object::Nil
             }
             Return(expr) => {
-                return Err(ErrorOrReturn::Return(self.evaluate(expr)?));
+                return Err(ControlFlow::Return(self.evaluate(expr)?));
             }
             VariableDeclaration(sym, maybe_init) => {
                 let obj = match maybe_init {
@@ -885,9 +446,9 @@ impl Interpreter {
                     match self.interpret_statement(body) {
                         Ok(_) => (),
                         Err(e) => match e {
-                            ErrorOrReturn::RuntimeError(_) => return Err(e),
-                            ErrorOrReturn::Return(_) => return Err(e),
-                            ErrorOrReturn::Break(_v) => break,
+                            ControlFlow::RuntimeError(_) => return Err(e),
+                            ControlFlow::Return(_) => return Err(e),
+                            ControlFlow::Break(_v) => break,
                         },
                     }
                 }
@@ -896,7 +457,7 @@ impl Interpreter {
         })
     }
 
-    pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Object, ErrorOrReturn> {
+    pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Object, ControlFlow> {
         let mut obj = None;
         for statement in statements {
             //~ eprintln!("{}", statement);
@@ -913,7 +474,7 @@ impl Interpreter {
         &mut self,
         stmts: &[Stmt],
         environment: Rc<RefCell<Environment>>,
-    ) -> (Rc<RefCell<Environment>>, Option<ErrorOrReturn>) {
+    ) -> (Rc<RefCell<Environment>>, Option<ControlFlow>) {
         self.environment = environment;
 
         let result = self.interpret_slice(stmts);
@@ -938,7 +499,7 @@ impl Interpreter {
         callee: &Object,
         arguments: Vec<Object>,
         location: SourceLocation,
-    ) -> Result<Object, ErrorOrReturn> {
+    ) -> Result<Object, ControlFlow> {
         use Object::*;
         match callee {
             NativeFunc(f) => match &f.closure {
@@ -956,9 +517,9 @@ impl Interpreter {
                     Ok(match ret {
                         Ok(obj) => obj,
                         Err(eor) => match eor {
-                            ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
-                            ErrorOrReturn::Return(v) => v,
-                            ErrorOrReturn::Break(_v) => todo!(),
+                            ControlFlow::RuntimeError(e) => return Err(e.into()),
+                            ControlFlow::Return(v) => v,
+                            ControlFlow::Break(_v) => todo!(),
                         },
                     })
                 }
@@ -984,9 +545,9 @@ impl Interpreter {
                 Ok(match ret {
                     Ok(obj) => obj,
                     Err(eor) => match eor {
-                        ErrorOrReturn::RuntimeError(e) => return Err(e.into()),
-                        ErrorOrReturn::Return(v) => v,
-                        ErrorOrReturn::Break(_v) => todo!(),
+                        ControlFlow::RuntimeError(e) => return Err(e.into()),
+                        ControlFlow::Return(v) => v,
+                        ControlFlow::Break(_v) => todo!(),
                     },
                 })
             }
@@ -1024,7 +585,7 @@ impl Interpreter {
         obj: Object,
         method_name: &Sym,
         location: SourceLocation,
-    ) -> Result<Object, ErrorOrReturn> {
+    ) -> Result<Object, ControlFlow> {
         let class_name = {
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(class_name_str)
@@ -1057,7 +618,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<Object, ErrorOrReturn> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<Object, ControlFlow> {
         use ExprKind::*;
         use Object::*;
         use Operator::*;
@@ -1393,6 +954,9 @@ impl Interpreter {
                     String(_) => {
                         self.access_native_method("String", obj.clone(), name, location)?
                     }
+                    Number(_) => {
+                        self.access_native_method("Number", obj.clone(), name, location)?
+                    }
                     _ => {
                         return Err(RuntimeError::type_error(
                             "Cannot access property, not an instance or class",
@@ -1541,6 +1105,15 @@ impl Interpreter {
                             Object::Nil
                         }
                     }
+                    Object::String(s) => {
+                        let s = s.to_string();
+                        let bstr = s.as_bytes();
+                        if index < bstr.len() {
+                            Object::Number(bstr[index] as f64)
+                        } else {
+                            Object::Nil
+                        }
+                    }
                     _o => {
                         return Err(RuntimeError::type_error(
                             "Attempt to index non-Array",
@@ -1614,15 +1187,15 @@ pub enum RuntimeErrorKind {
     UndefinedVariable,
 }
 
-pub enum ErrorOrReturn {
+pub enum ControlFlow {
     RuntimeError(RuntimeError),
     Return(Object),
     Break(Option<Object>),
 }
 
-impl From<RuntimeError> for ErrorOrReturn {
+impl From<RuntimeError> for ControlFlow {
     fn from(other: RuntimeError) -> Self {
-        ErrorOrReturn::RuntimeError(other)
+        ControlFlow::RuntimeError(other)
     }
 }
 

@@ -1,0 +1,247 @@
+var Iter = require("scripts/iter.blx");
+
+fun is_whitespace_or_eof(c) {
+    switch c {
+        -1, 10, 13, 32 {
+            return true;
+        }
+    }
+}
+
+fun print_str(s) {
+    for i in Iter.range(0, s.len()) {
+        putc(s[i]);
+    }
+}
+
+var last_char;
+fun read_word() {
+    while true {
+        last_char = getc();
+
+        if last_char == -1 {
+            return nil;
+        }
+
+        if !is_whitespace_or_eof(last_char) {
+            break;
+        }
+
+        if last_char == 10 or last_char == 13 { return ""; }
+    }
+
+    var word = "";
+    while !is_whitespace_or_eof(last_char) {
+        word = word + chr(last_char);
+
+        last_char = getc();
+    }
+
+    return word;
+}
+
+
+class Board {
+    init() {
+        var half_size = 7;
+        this.size = half_size * 2;
+
+        this.player_one = half_size - 1;
+        this.player_two = this.size - 1;
+
+        this.board = [4; this.size];
+        this.board[this.player_one] = 0;
+        this.board[this.player_two] = 0;
+
+        this.turn = this.player_one;
+        //~ this.turn = this.player_two;
+    }
+
+    player_can_play(n) {
+        switch this.turn {
+            this.player_one {
+            }
+            this.player_two {
+            }
+        }
+    }
+
+    opposite_player(player) {
+        switch player {
+            this.player_one {
+                return this.player_two;
+            }
+            this.player_two {
+                return this.player_one;
+            }
+        }
+    }
+
+    play(n) {
+        var handful = this.board[n];
+        this.board[n] = 0;
+
+        var opposite_player = this.opposite_player(this.turn);
+
+        var capture = false;
+
+        var i = 0;
+        var pit;
+        var was_empty;
+
+        while handful > 0 {
+            pit = (n + i + 1) % this.size;
+
+            if pit != opposite_player {
+                was_empty = this.board[pit] == 0;
+
+                this.board[pit] += 1;
+
+                handful -= 1;
+            }
+
+            i += 1;
+        }
+
+        var opposite_pit = (this.player_two - 1 - pit + this.size) % this.size;
+
+        var extra_turn = false;
+
+        if was_empty {
+            switch opposite_pit {
+                this.player_one, this.player_two {
+                    extra_turn = true;
+                }
+                else {
+                    if this.on_players_side(this.turn, pit) {
+                        // capture
+                        this.board[this.turn] += this.board[pit] + this.board[opposite_pit];
+                        this.board[pit] = 0;
+                        this.board[opposite_pit] = 0;
+                    }
+                }
+            }
+        }
+
+        if !extra_turn {
+            this.turn = opposite_player;
+        }
+
+        return capture;
+    }
+
+    on_players_side(player, pit) {
+        switch player {
+            this.player_one {
+                return pit <= this.player_one;
+            }
+            this.player_two {
+                return pit > this.player_one;
+            }
+        }
+    }
+
+    try_game_over() {
+        var player_one_total = 0;
+        var player_two_total = 0;
+
+        for player_one_pit in Iter.range(0, this.size / 2 - 1) {
+            var player_two_pit = this.player_two - 1 - player_one_pit;
+            player_one_total += this.board[player_one_pit];
+            player_two_total += this.board[player_two_pit];
+        }
+
+        if player_one_total == 0 or player_two_total == 0 {
+            this.player_one_final = this.board[this.player_one] + player_one_total;
+            this.player_two_final = this.board[this.player_two] + player_two_total;
+            return true;
+        }
+    }
+
+    show() {
+        var half = this.size / 2;
+        for i in Iter.range(0, half) {
+            print_str(" ");
+            var n = this.board[this.size - i - 1];
+            //~ var n = this.size - i - 1;
+            if n < 10 {
+                print_str(" ");
+            }
+            print_str(to_string(n));
+        }
+        print "";
+        print_str("   ");
+        for i in Iter.range(0, half) {
+            print_str(" ");
+            var n = this.board[i];
+            //~ var n = i;
+            if n < 10 {
+                print_str(" ");
+            }
+            print_str(to_string(n));
+        }
+        print "";
+        print "     A  B  C  D  E  F";
+    }
+}
+
+var board = Board();
+
+board.show();
+print "";
+
+var wait_for_input = true;
+var input;
+while wait_for_input {
+    if board.try_game_over() {
+        print "Final score: ";
+        print "player one: " + to_string(board.player_one_final);
+        print "player two: " + to_string(board.player_two_final);
+        wait_for_input = false;
+    } else {
+        switch board.turn {
+            board.player_one {
+                print_str("challenger to play> ");
+            }
+            board.player_two {
+                print_str("defender to play> ");
+            }
+        }
+
+        input = read_word();
+
+        if !input or input == "quit" or input == "q" or input == "exit" {
+            wait_for_input = false;
+        } else if input != "" {
+            var number = to_number(input);
+            var letter = input[0];
+            if input.len() == 1 {
+                var pit_choice;
+                if letter >= 65 and letter <= 70 {
+                    pit_choice = letter - 65;
+                } else if letter >= 97 and letter <= 102 {
+                    pit_choice = letter - 97;
+                }
+                if pit_choice {
+                    if board.turn == board.player_two {
+                        pit_choice = board.player_two - 1 - pit_choice;
+                    }
+
+                    if board.board[pit_choice] != 0 {
+                        board.play(pit_choice);
+                    } else {
+                        print "";
+                        print "can't select empty pit";
+                    }
+
+                }
+            }
+
+            print "";
+            board.show();
+            print "";
+        }
+    }
+}
+
+

@@ -6,7 +6,7 @@ use std::io::Write;
 
 use bollox::*;
 
-use interpreter::ErrorOrReturn;
+use interpreter::ControlFlow;
 use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
@@ -32,10 +32,7 @@ fn run() -> GenericResult {
         None => {
             let mut stdin = io::BufReader::new(io::stdin());
             let mut parser = Parser::new(Scanner::new("", SourceId(0)));
-            let mut interpreter = Interpreter::new(clargs.compatibility);
-
-            interpreter.init_global_environment();
-            interpreter.init_native_methods();
+            let mut interpreter = Interpreter::new_with_stdlib(clargs.compatibility);
 
             loop {
                 write!(stdout, "> ")?;
@@ -51,9 +48,9 @@ fn run() -> GenericResult {
                     match interpreter.interpret_slice(&statements[..]) {
                         Ok(_o) => (), //writeln!(stdout, "=> {}", o)?,
                         Err(eor) => match eor {
-                            ErrorOrReturn::RuntimeError(e) => writeln!(stdout, "{}", e)?,
-                            ErrorOrReturn::Return(o) => writeln!(stdout, "=> {}", o)?,
-                            ErrorOrReturn::Break(_) => writeln!(stdout, "error: unexpected break")?,
+                            ControlFlow::RuntimeError(e) => writeln!(stdout, "{}", e)?,
+                            ControlFlow::Return(o) => writeln!(stdout, "=> {}", o)?,
+                            ControlFlow::Break(_) => writeln!(stdout, "error: unexpected break")?,
                         },
                     }
                 }
