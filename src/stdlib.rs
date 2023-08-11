@@ -165,7 +165,7 @@ pub fn init_global_environment(env: &mut Environment) {
                     let result = crate::run_string(source.clone(), 0, false);
 
                     match result {
-                        Ok(obj) => Ok(obj.unwrap()),
+                        Ok(obj) => Ok(obj.unwrap_or(Object::Nil)),
                         Err(e) => {
                             eprintln!(
                                 "error on line {:?}",

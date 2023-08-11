@@ -255,8 +255,10 @@ impl Parser {
         self.advance();
 
         while let Some(token) = self.peek() {
-            if let TokenKind::Op(Operator::Semicolon) = self.peek_previous().unwrap().kind {
-                break;
+            if let Some(t) = self.peek_previous() {
+                if let TokenKind::Op(Operator::Semicolon) = t.kind {
+                    break;
+                }
             }
 
             use ReservedWord::*;
@@ -389,7 +391,7 @@ impl Parser {
 
         self.consume_expected(&[TokenKind::LeftBrace])?;
 
-        let body = self.block()?;
+        let body = self.declaration_block()?;
 
         Ok(crate::object::LoxFunction {
             parameters,
@@ -449,7 +451,7 @@ impl Parser {
         }
 
         if self.advance_if_match(TokenKind::LeftBrace) {
-            return Ok(Stmt::new(StmtKind::Block(self.block()?)));
+            return Ok(Stmt::new(StmtKind::Block(self.declaration_block()?)));
         }
 
         self.expression_statement()
@@ -532,7 +534,7 @@ impl Parser {
         let iter_expr = self.expression()?;
 
         let body = if self.advance_if_match(TokenKind::LeftBrace) {
-            Box::new(Stmt::new(StmtKind::Block(self.block()?)))
+            Box::new(Stmt::new(StmtKind::Block(self.declaration_block()?)))
         } else {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
         };
@@ -596,7 +598,7 @@ impl Parser {
             ExprKind::Grouping(_) => Box::new(self.statement()?),
             _ => {
                 if self.advance_if_match(TokenKind::LeftBrace) {
-                    Box::new(Stmt::new(StmtKind::Block(self.block()?)))
+                    Box::new(Stmt::new(StmtKind::Block(self.statement_block()?)))
                 } else {
                     return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
                 }
@@ -605,7 +607,7 @@ impl Parser {
 
         let else_block = if self.advance_if_match(TokenKind::Reserved(ReservedWord::Else)) {
             if self.advance_if_match(TokenKind::LeftBrace) {
-                Some(Box::new(Stmt::new(StmtKind::Block(self.block()?))))
+                Some(Box::new(Stmt::new(StmtKind::Block(self.statement_block()?))))
             } else if self.advance_if_match(TokenKind::Reserved(ReservedWord::If)) {
                 Some(Box::new(self.if_statement()?))
             } else {
@@ -682,7 +684,7 @@ impl Parser {
         let else_branch = if self.advance_if_match(TokenKind::Reserved(ReservedWord::Else)) {
             self.consume_expected(&[TokenKind::LeftBrace])?;
 
-            let body = Box::new(Stmt::new(StmtKind::Block(self.block()?)));
+            let body = Box::new(Stmt::new(StmtKind::Block(self.statement_block()?)));
 
             Some(body)
         } else {
@@ -733,7 +735,7 @@ impl Parser {
 
         self.consume_expected(&[TokenKind::LeftBrace])?;
 
-        let body = self.block()?;
+        let body = self.statement_block()?;
 
         let mut conditional: Option<Expr> = None;
 
@@ -777,7 +779,7 @@ impl Parser {
             ExprKind::Grouping(_) => Box::new(self.statement()?),
             _ => {
                 if self.advance_if_match(TokenKind::LeftBrace) {
-                    Box::new(Stmt::new(StmtKind::Block(self.block()?)))
+                    Box::new(Stmt::new(StmtKind::Block(self.statement_block()?)))
                 } else {
                     return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
                 }
@@ -786,10 +788,24 @@ impl Parser {
         Ok(Stmt::new(StmtKind::While(condition, body)))
     }
 
-    fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    fn declaration_block(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut stmts = vec![];
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        self.consume_expected(&[TokenKind::RightBrace])?;
+
+        Ok(stmts)
+    }
+
+    fn statement_block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut stmts = vec![];
+
+        while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
+            // we don't do a separate statement block for `if` etc because it enables some useful idioms
+            //~ stmts.push(self.statement()?);
             stmts.push(self.declaration()?);
         }
 
