@@ -294,11 +294,11 @@ impl Interpreter {
     }
 
     pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
-        if self.compatibility_mode {
-            Environment::new_inner(self.environment.clone())
-        } else {
-            self.environment.borrow().flat_copy()
-        }
+        //~ if self.compatibility_mode {
+        //~ Environment::new_inner(self.environment.clone())
+        //~ } else {
+        self.environment.borrow().flat_copy()
+        //~ }
     }
 
     pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ControlFlow> {
@@ -320,7 +320,13 @@ impl Interpreter {
                     None => None,
                 }));
             }
-            Class(name, superclass_name, method_decls, associated_decls) => {
+            ClassDeclaration {
+                global,
+                name,
+                superclass: superclass_name,
+                methods: method_decls,
+                associated_funcs: associated_decls,
+            } => {
                 let method_environment = self.create_closure();
 
                 let superclass = if let Some(superclass_name) = superclass_name {
@@ -354,7 +360,7 @@ impl Interpreter {
 
                 for stmt in method_decls {
                     let (name, func) = match &stmt.kind {
-                        StmtKind::FunctionDeclaration(name, func) => (name, func),
+                        StmtKind::FunctionDeclaration(_, name, func) => (name, func),
                         _ => {
                             return Err(RuntimeError::ice(
                                 "statement in class is not a method or associated function. bad syntax tree",
@@ -375,7 +381,7 @@ impl Interpreter {
 
                 for stmt in associated_decls {
                     let (name, func) = match &stmt.kind {
-                        StmtKind::FunctionDeclaration(name, func) => (name, func),
+                        StmtKind::FunctionDeclaration(_, name, func) => (name, func),
                         _ => {
                             return Err(RuntimeError::ice(
                                 "statement in class is not a method or associated function. bad syntax tree",
@@ -399,14 +405,18 @@ impl Interpreter {
                     associated_functions,
                 }));
 
-                method_environment.borrow_mut().define(name, obj.clone());
+                if *global {
+                    self.globals.borrow_mut().define(name, obj);
+                } else {
+                    method_environment.borrow_mut().define(name, obj.clone());
 
-                self.environment.borrow_mut().define(name, obj);
+                    self.environment.borrow_mut().define(name, obj);
+                }
 
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
-            FunctionDeclaration(name, func) => {
+            FunctionDeclaration(global, name, func) => {
                 let closure = self.create_closure();
 
                 let mut new_func = func.clone();
@@ -414,8 +424,14 @@ impl Interpreter {
                 new_func.closure = closure.clone();
 
                 let obj = Object::LoxFunc(new_func);
-                closure.borrow_mut().define(name, obj.clone());
-                self.environment.borrow_mut().define(name, obj);
+
+                if *global {
+                    self.globals.borrow_mut().define(name, obj);
+                } else {
+                    closure.borrow_mut().define(name, obj.clone());
+                    self.environment.borrow_mut().define(name, obj);
+                }
+
                 Object::Nil
             }
             If(cond, then_block, else_block) => {
@@ -433,12 +449,16 @@ impl Interpreter {
             Return(expr) => {
                 return Err(ControlFlow::Return(self.evaluate(expr)?));
             }
-            VariableDeclaration(sym, maybe_init) => {
+            VariableDeclaration(global, sym, maybe_init) => {
                 let obj = match maybe_init {
                     Some(init) => self.evaluate(init)?,
                     None => Object::Nil,
                 };
-                self.environment.borrow_mut().define(sym, obj);
+                if *global {
+                    self.globals.borrow_mut().define(sym, obj);
+                } else {
+                    self.environment.borrow_mut().define(sym, obj);
+                }
                 Object::Nil
             }
             While(cond, body) => {

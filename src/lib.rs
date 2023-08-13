@@ -41,7 +41,7 @@ pub fn run_string(
     id: usize,
     compatibility_mode: bool,
 ) -> Result<Option<object::Object>> {
-    let mut parser = Parser::new(Scanner::new(&source, SourceId(id)));
+    let mut parser = Parser::new(Scanner::new(&source, SourceId(id)), compatibility_mode);
     let statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();

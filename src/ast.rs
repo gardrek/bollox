@@ -20,13 +20,20 @@ impl Stmt {
 pub enum StmtKind {
     Block(Vec<Stmt>),
     Break(Option<Expr>),
-    Class(Sym, Option<Sym>, Vec<Stmt>, Vec<Stmt>),
+    //~ ClassDeclaration(Sym, Option<Sym>, Vec<Stmt>, Vec<Stmt>),
+    ClassDeclaration {
+        global: bool,
+        name: Sym,
+        superclass: Option<Sym>,
+        methods: Vec<Stmt>,
+        associated_funcs: Vec<Stmt>,
+    },
     Expr(Expr),
-    FunctionDeclaration(Sym, LoxFunction),
+    FunctionDeclaration(bool, Sym, LoxFunction),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr),
-    VariableDeclaration(Sym, Option<Expr>),
+    VariableDeclaration(bool, Sym, Option<Expr>),
     While(Expr, Box<Stmt>),
 }
 
@@ -89,11 +96,13 @@ impl fmt::Display for StmtKind {
                 Some(e) => write!(f, "(break-stmt {})", e),
                 None => write!(f, "(break-stmt)"),
             },
-            StmtKind::Class(name, _, _, _) => {
-                write!(f, "(class-stmt {})", crate::object::sym_to_str(name))
+            StmtKind::ClassDeclaration { global, name, .. } => {
+                let l = if *global { "global" } else { "local" };
+                write!(f, "(class-stmt {l} {})", crate::object::sym_to_str(name))
             }
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration(
+                global,
                 name,
                 LoxFunction {
                     parameters,
@@ -101,7 +110,8 @@ impl fmt::Display for StmtKind {
                     closure: _,
                 },
             ) => {
-                write!(f, "(fun-stmt {} (", crate::object::sym_to_str(name))?;
+                let l = if *global { "global" } else { "local" };
+                write!(f, "(fun-stmt {l} {} (", crate::object::sym_to_str(name))?;
                 for p in parameters {
                     write!(f, " {}", crate::object::sym_to_str(p))?;
                 }
@@ -117,10 +127,19 @@ impl fmt::Display for StmtKind {
             },
             StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
             StmtKind::Return(expr) => write!(f, "(return-stmt {})", expr),
-            StmtKind::VariableDeclaration(sym, expr) => match expr {
-                Some(e) => write!(f, "(var-stmt {} {})", crate::object::sym_to_str(sym), e),
-                None => write!(f, "(var-stmt {})", crate::object::sym_to_str(sym)),
-            },
+            StmtKind::VariableDeclaration(global, sym, expr) => {
+                let l = if *global { "global" } else { "local" };
+                match expr {
+                    Some(e) => write!(
+                        f,
+                        "(var-stmt {} {} {})",
+                        l,
+                        crate::object::sym_to_str(sym),
+                        e
+                    ),
+                    None => write!(f, "(var-stmt {} {})", l, crate::object::sym_to_str(sym)),
+                }
+            }
             StmtKind::While(cond, body) => write!(f, "(while-stmt {} {})", cond, body),
         }
     }

@@ -8,19 +8,21 @@
 
 `cargo run --release -- path/to/script.lox` - to run a script.
 
-`cargo run --release -- --compatibility path/to/script.lox` - for better compatibility with standard Lox. Switches back to C-style `if` and `while` statements instead of Rust-style. In the future this may also change how closures capture their environment.
+`cargo run --release -- --compatibility path/to/script.lox` - for better compatibility with standard Lox. Makes variable declarations in the "global" scope of a file default to being global variables. Same for function declarations and class declarations.
 
 
 
 # Differences compared to standard Lox #
 
+All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode variable, function, and class declarations in the top-level scope of a file default to being global. For the rare use case that you require compatibility mode, you can use the `local` decorator to declare something as local to the top-level scope. The local decorator is always allowed but has no effect in other contexts.
+
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 
 Except in compatibility mode, closures make a copy of the environment rather than taking reference. This eliminates the ability to use variables that haven't been declared yet when the function is declared.
 
-There is no static analysis pass, so some things that would have been compile-time errors are now runtime errors. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
+There is no static analysis pass, so some things that would have been compile-time errors in Lox are runtime errors in Bollox. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 
-Modulo operator `a % b`
+Remainder operator `a % b`
 
 Combined operator syntax. e.g. `a += b`
 
@@ -78,7 +80,7 @@ if input == "dup" {
 }
 ```
 
-Basic array support. Currently arrays are fixed-size but can be mutated in-place.
+Basic array support. Currently arrays can only be grown or shrunk using push and pop methods.
 ```js
 var a = [-1, 0, 10 + 40, 10000, 0.4];
 
@@ -93,6 +95,7 @@ var x = [0; 100]; // one hundred element array filled with zeroes
 ## Book Challenge Extensions ##
 
 Supports:
+- block comments `/* comment */` with nesting
 - anonymous functions with the syntax `fun(...) { ... }`.
 - break statements with simple `break;` syntax.
 - associated functions on classes with `class func_name(...) {...}` and `ClassName.func_name(...)`

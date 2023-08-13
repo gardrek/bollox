@@ -31,7 +31,7 @@ fn run() -> GenericResult {
         // If no arguments, run interactively
         None => {
             let mut stdin = io::BufReader::new(io::stdin());
-            let mut parser = Parser::new(Scanner::new("", SourceId(0)));
+            let mut parser = Parser::new(Scanner::new("", SourceId(0)), clargs.compatibility);
             let mut interpreter = Interpreter::new_with_stdlib(clargs.compatibility);
 
             loop {
@@ -55,8 +55,7 @@ fn run() -> GenericResult {
                     }
                 }
 
-                while !parser.errors.is_empty() {
-                    let e = parser.errors.pop().unwrap();
+                while let Some(e) = parser.errors.pop() {
                     eprintln!("{}", e);
                 }
 
