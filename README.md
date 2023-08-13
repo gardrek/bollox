@@ -18,8 +18,6 @@ All variable declarations are local by default, but can be annotated with the `g
 
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 
-Except in compatibility mode, closures make a copy of the environment rather than taking reference. This eliminates the ability to use variables that haven't been declared yet when the function is declared.
-
 There is no static analysis pass, so some things that would have been compile-time errors in Lox are runtime errors in Bollox. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 
 Remainder operator `a % b`
@@ -90,6 +88,8 @@ a[1] = 5;
 
 var x = [0; 100]; // one hundred element array filled with zeroes
 ```
+
+Indexing an array or string with a negative number or past the end returns nil. Indexing with a fractional number uses the floor of the number. Indexing with NaN or Inf returns nil.
 
 
 ## Book Challenge Extensions ##

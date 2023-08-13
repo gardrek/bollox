@@ -1091,19 +1091,15 @@ impl Interpreter {
 
                 let index = match self.evaluate(index)? {
                     Object::Number(n) => {
-                        if n >= 0.0 {
-                            n as usize
+                        if n.is_finite() {
+                            n.floor() as isize
                         } else {
-                            return Err(RuntimeError::type_error(
-                                "Array index must be a non-negative number",
-                                location,
-                            )
-                            .into());
+                            return Ok(Object::Nil)
                         }
                     }
                     _o => {
                         return Err(RuntimeError::type_error(
-                            "Array index must be a non-negative number",
+                            "Array index must be a number",
                             location,
                         )
                         .into())
@@ -1112,8 +1108,8 @@ impl Interpreter {
 
                 match obj {
                     Object::Array(v) => {
-                        if index < v.borrow().len() {
-                            v.borrow()[index].clone()
+                        if index >= 0 && index < v.borrow().len() as isize {
+                            v.borrow()[index as usize].clone()
                         } else {
                             Object::Nil
                         }
@@ -1121,8 +1117,8 @@ impl Interpreter {
                     Object::String(s) => {
                         let s = s.to_string();
                         let bstr = s.as_bytes();
-                        if index < bstr.len() {
-                            Object::Number(bstr[index] as f64)
+                        if index >= 0 && index < bstr.len() as isize {
+                            Object::Number(bstr[index as usize] as f64)
                         } else {
                             Object::Nil
                         }
