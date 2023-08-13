@@ -19,7 +19,6 @@ trait EnvTrait {
     fn assign(&mut self, sym: &Sym, value: Object);
     fn get(&self, sym: &Sym) -> Option<Object>;
     fn is_defined(&self, sym: &Sym) -> bool;
-
 }
 
 impl EnvTrait for Environment {
@@ -107,7 +106,7 @@ pub struct Closure {
     enclosing: Rc<RefCell<EnvOrClosure>>,
     bindings: HashSet<Sym>,
 }
-*/
+//~ */
 
 #[derive(Debug, Default)]
 pub struct Environment {
@@ -714,13 +713,7 @@ impl Interpreter {
                             )
                             .into());
                         }
-                        (String(left_s), String(right_s)) => {
-                            Object::String(left_s.concat(right_s))
-                            //String(StringKind::Dynamic(
-                            //left.string_concat(&right)
-                            //.map_err(|_| Error::Runtime("Cannot concat, second arg not a string"))?
-                            //))
-                        }
+                        (String(left_s), String(right_s)) => Object::String(left_s.concat(right_s)),
                         (String(_), _) => {
                             return Err(RuntimeError::type_error(
                                 "Cannot concat, second arg not a string",

@@ -14,7 +14,7 @@
 
 # Differences compared to standard Lox #
 
-All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode variable, function, and class declarations in the top-level scope of a file default to being global. For the rare use case that you require compatibility mode, you can use the `local` decorator to declare something as local to the top-level scope. The local decorator is always allowed but has no effect in other contexts.
+All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode variable, function, and class declarations in the top-level scope of a file default to being global. For the rare use case that you require compatibility mode, you can use the `local` decorator to declare something as local in the top-level scope. The local decorator is always allowed but has no effect in other contexts.
 
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 

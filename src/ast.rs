@@ -20,7 +20,6 @@ impl Stmt {
 pub enum StmtKind {
     Block(Vec<Stmt>),
     Break(Option<Expr>),
-    //~ ClassDeclaration(Sym, Option<Sym>, Vec<Stmt>, Vec<Stmt>),
     ClassDeclaration {
         global: bool,
         name: Sym,
