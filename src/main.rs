@@ -71,8 +71,12 @@ fn run() -> GenericResult {
 
             if let Err(e) = &result {
                 eprintln!(
-                    "error on line {:?}",
-                    source::SourceLocation::error_line_number(e, &source)
+                    "error on line {:?}: `{}`",
+                    source::SourceLocation::error_line_number(e, &source),
+                    match e.get_location() {
+                        Some(l) => &source[l.range.clone()],
+                        None => "",
+                    }
                 )
             }
 

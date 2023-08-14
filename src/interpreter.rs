@@ -293,11 +293,11 @@ impl Interpreter {
     }
 
     pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
-        //~ if self.compatibility_mode {
-        //~ Environment::new_inner(self.environment.clone())
-        //~ } else {
-        self.environment.borrow().flat_copy()
-        //~ }
+        if self.compatibility_mode {
+            Environment::new_inner(self.environment.clone())
+        } else {
+            self.environment.borrow().flat_copy()
+        }
     }
 
     pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ControlFlow> {
@@ -1094,7 +1094,7 @@ impl Interpreter {
                         if n.is_finite() {
                             n.floor() as isize
                         } else {
-                            return Ok(Object::Nil)
+                            return Ok(Object::Nil);
                         }
                     }
                     _o => {

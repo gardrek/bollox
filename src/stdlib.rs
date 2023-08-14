@@ -537,6 +537,59 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
         },
     );
 
+    // Array.bytes_to_str()
+
+    native_methods.add_method(
+        "bytes_to_str",
+        0,
+        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+            let this_name = {
+                let mut interner = INTERNER.write().unwrap();
+                interner.get_or_intern("this")
+            };
+
+            let this = match interpreter.get_binding(&this_name) {
+                Some(o) => o,
+                None => {
+                    return Err(RuntimeError::ice(
+                        "`this` not defined for method",
+                        SourceLocation::bullshit(),
+                    )
+                    .into())
+                }
+            };
+
+            match this {
+                Object::Array(arr) => {
+                    let arr = arr.borrow();
+                    let mut bytes = Vec::with_capacity(arr.len());
+                    for v in arr.iter() {
+                        match v {
+                            Object::Number(n) => {
+                                let int = n.floor();
+                                if (&0.0..&256.0).contains(&n) {
+                                    bytes.push(int as u8);
+                                } else {
+                                    return Ok(Object::Nil);
+                                };
+                            }
+                            _ => return Ok(Object::Nil),
+                        }
+                    }
+                    match std::str::from_utf8(&bytes) {
+                        Ok(s) => Ok(Object::dynamic_string(s.to_string())),
+                        _ => Ok(Object::Nil),
+                    }
+                }
+                _ => Err(RuntimeError::ice(
+                    "`this` not an array for array method",
+                    SourceLocation::bullshit(),
+                )
+                .into()),
+            }
+        },
+    );
+
     //
 
     interpreter

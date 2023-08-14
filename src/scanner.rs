@@ -171,8 +171,61 @@ impl Scanner {
     }
 
     fn number(&mut self) -> Token {
-        let mut length = 0;
         let offset = self.cursor;
+
+        if let Some('0') = self.peek_char() {
+            self.advance_char();
+            if let Some(ch) = self.peek_char() {
+                match ch {
+                    'x' => {
+                        let len = 1 + ch.len_utf8();
+                        self.advance_char();
+                        self.hex_int(offset, len)
+                    }
+                    _ => self.float(offset, 1),
+                }
+            } else {
+                self.float(offset, 0)
+            }
+        } else {
+            self.float(offset, 0)
+        }
+    }
+
+    fn hex_int(&mut self, offset: usize, length_so_far: usize) -> Token {
+        let mut length = length_so_far;
+
+        while let Some(ch) = self.peek_char() {
+            if let Some(_digit) = ch.to_digit(16) {
+                self.advance_char();
+                length += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        let location = SourceLocation::from_range(offset..(offset + length));
+
+        let slice = self.source.get_slice(&location).strip_prefix("0x").unwrap();
+
+        let value = match i64::from_str_radix(slice, 16) {
+            Ok(v) => v as f64,
+            Err(_) => {
+                return Token {
+                    location,
+                    kind: TokenKind::InvalidNumber,
+                }
+            }
+        };
+
+        Token {
+            location,
+            kind: TokenKind::Number(value),
+        }
+    }
+
+    fn float(&mut self, offset: usize, length_so_far: usize) -> Token {
+        let mut length = length_so_far;
 
         let mut decimal = false;
         while let Some(ch) = self.peek_char() {
@@ -203,12 +256,9 @@ impl Scanner {
 
         let location = SourceLocation::from_range(offset..(offset + length));
 
-        let value = self
-            .source
-            .get_slice(&location)
-            .parse::<f64>()
-            .ok()
-            .unwrap();
+        let slice = self.source.get_slice(&location);
+
+        let value = slice.parse::<f64>().unwrap();
 
         Token {
             location,

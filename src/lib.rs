@@ -50,16 +50,17 @@ pub fn run_string(
         //~ if true {
         for e in parser.errors {
             eprintln!(
-                "error on line {:?}: {}",
+                "error on line {:?}: {} `{}`",
                 crate::source::SourceLocation::error_line_number(
                     &result::Error::Parser(e.clone()),
                     &source
                 ),
                 e,
+                e.get_slice(&source),
             )
         }
 
-        //~ /*
+        /*
         eprintln!();
         for s in &statements {
             //~ eprint!("{} ", s);

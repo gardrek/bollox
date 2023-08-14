@@ -24,6 +24,7 @@ pub enum TokenKind {
 
     // Literals
     Number(f64),
+    InvalidNumber,
     StaticString(Sym),
     UnfinishedString,
     Identifier(Sym),
@@ -124,6 +125,7 @@ impl TokenKind {
             | (LeftBracket, LeftBracket)
             | (RightBracket, RightBracket)
             | (Number(_), Number(_))
+            | (InvalidNumber, InvalidNumber)
             | (StaticString(_), StaticString(_))
             | (UnfinishedString, UnfinishedString)
             | (Identifier(_), Identifier(_)) => true, //~ | (Eof, Eof) => true,
@@ -151,6 +153,8 @@ impl TokenKind {
             | (_, RightBracket)
             | (Number(_), _)
             | (_, Number(_))
+            | (InvalidNumber, _)
+            | (_, InvalidNumber)
             | (StaticString(_), _)
             | (_, StaticString(_))
             | (UnfinishedString, _)
@@ -284,9 +288,10 @@ impl fmt::Display for TokenKind {
             Op(op) => write!(f, "{}", op),
 
             Number(num) => write!(f, "{}", num),
+            InvalidNumber => write!(f, "InvalidNumber"),
             StaticString(sym) => write!(f, "StaticString#{:?}", sym),
             UnfinishedString => write!(f, "UnfinishedString"),
-            Identifier(sym) => write!(f, "ID#{:?}", sym),
+            Identifier(sym) => write!(f, "{}", crate::object::sym_to_str(sym)),
             Reserved(word) => write!(f, "#{}", reserved_word_as_string(word)),
         }
     }

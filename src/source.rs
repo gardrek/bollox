@@ -58,7 +58,7 @@ pub struct SourceLocation {
     source: SourceId,
 
     // byte-indexed location from the start of the file/string
-    range: std::ops::Range<usize>,
+    pub range: std::ops::Range<usize>,
 }
 
 impl SourceLocation {

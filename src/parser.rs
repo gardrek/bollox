@@ -75,6 +75,12 @@ impl core::fmt::Display for ParseError {
     }
 }
 
+impl ParseError {
+    pub fn get_slice<'a>(&self, source: &'a str) -> &'a str {
+        &source[self.location.range.clone()]
+    }
+}
+
 pub struct Parser {
     scanner: Scanner,
     previous: Option<Token>,
