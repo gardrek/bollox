@@ -1139,19 +1139,15 @@ impl Interpreter {
 
                 let index = match self.evaluate(index)? {
                     Object::Number(n) => {
-                        if n >= 0.0 {
-                            n as usize
+                        if n.is_finite() {
+                            n.floor() as isize
                         } else {
-                            return Err(RuntimeError::type_error(
-                                "Array index must be a non-negative number",
-                                location,
-                            )
-                            .into());
+                            return Ok(Object::Nil);
                         }
                     }
                     _o => {
                         return Err(RuntimeError::type_error(
-                            "Array index must be a non-negative number",
+                            "Array index must be a number",
                             location,
                         )
                         .into())
@@ -1160,12 +1156,12 @@ impl Interpreter {
 
                 match obj {
                     Object::Array(v) => {
-                        if index < v.borrow().len() {
-                            let val = self.evaluate(val)?;
-                            v.borrow_mut()[index] = val.clone();
+                        let val = self.evaluate(val)?;
+                        if index >= 0 && index < v.borrow().len() as isize {
+                            v.borrow_mut()[index as usize] = val.clone();
                             val
                         } else {
-                            todo!()
+                            val
                         }
                     }
                     _o => {
