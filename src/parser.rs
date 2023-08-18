@@ -409,11 +409,11 @@ impl Parser {
     fn function_declaration(&mut self, global: bool) -> Result<Stmt, ParseError> {
         let name = self.consume_identifier()?;
 
-        Ok(Stmt::new(StmtKind::FunctionDeclaration(
+        Ok(Stmt::new(StmtKind::FunctionDeclaration {
             global,
             name,
-            self.function()?,
-        )))
+            func: self.function()?,
+        }))
     }
 
     fn function(&mut self) -> Result<crate::object::LoxFunction, ParseError> {
@@ -467,11 +467,11 @@ impl Parser {
 
         self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
-        Ok(Stmt::new(StmtKind::VariableDeclaration(
+        Ok(Stmt::new(StmtKind::VariableDeclaration {
             global,
-            sym,
+            name: sym,
             initializer,
-        )))
+        }))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
@@ -598,22 +598,22 @@ impl Parser {
             interner.get_or_intern("for")
         };
 
-        let iter_declaration = Stmt::new(StmtKind::VariableDeclaration(
-            false,
-            iter_name,
-            Some(iter_expr),
-        ));
+        let iter_declaration = Stmt::new(StmtKind::VariableDeclaration {
+            global: false,
+            name: iter_name,
+            initializer: Some(iter_expr),
+        });
 
         let literal_true = Expr {
             location: SourceLocation::bullshit(),
             kind: ExprKind::Literal(Object::Boolean(true)),
         };
 
-        let counter_declaration = Stmt::new(StmtKind::VariableDeclaration(
-            false,
-            counter_name,
-            Some(literal_true),
-        ));
+        let counter_declaration = Stmt::new(StmtKind::VariableDeclaration {
+            global: false,
+            name: counter_name,
+            initializer: Some(literal_true),
+        });
 
         let counter_function = Expr {
             location: SourceLocation::bullshit(),
@@ -725,11 +725,11 @@ impl Parser {
             kind: ExprKind::VariableAccess(subject_name),
         };
 
-        let subject_declaration = Stmt::new(StmtKind::VariableDeclaration(
-            false,
-            subject_name,
-            Some(subject),
-        ));
+        let subject_declaration = Stmt::new(StmtKind::VariableDeclaration {
+            global: false,
+            name: subject_name,
+            initializer: Some(subject),
+        });
 
         if !self.advance_if_match(TokenKind::LeftBrace) {
             return Err(self.error(ParseErrorKind::ExpectedLeftBrace));
@@ -940,7 +940,11 @@ impl Parser {
                 },
                 ExprKind::Index(obj, index) => Expr {
                     location: expr.location,
-                    kind: ExprKind::IndexAssign(obj, index, r_expr),
+                    kind: ExprKind::IndexAssign {
+                        obj,
+                        index,
+                        val: r_expr,
+                    },
                 },
 
                 // TODO: Can we report and synchronize here?

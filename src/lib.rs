@@ -12,7 +12,8 @@ pub mod ast;
 pub mod object;
 pub mod result;
 pub mod scanner;
-pub mod token;
+
+mod token;
 
 mod stdlib;
 
@@ -41,7 +42,10 @@ pub fn run_string(
     id: usize,
     compatibility_mode: bool,
 ) -> Result<Option<object::Object>> {
-    let mut parser = Parser::new(Scanner::new(&source, SourceId(id)), compatibility_mode);
+    let mut parser = Parser::new(
+        Scanner::new(&source, SourceId(id), compatibility_mode),
+        compatibility_mode,
+    );
     let statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();

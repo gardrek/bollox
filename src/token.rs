@@ -171,6 +171,29 @@ impl TokenKind {
     }
 }
 
+impl ReservedWord {
+    pub fn is_modal(&self) -> bool {
+        use ReservedWord::*;
+        !matches!(
+            self,
+            And | Class
+                | Else
+                | False
+                | Fun
+                | For
+                | If
+                | Nil
+                | Or
+                | Print
+                | Return
+                | Super
+                | This
+                | True
+                | Var
+                | While
+        )
+    }
+}
 pub fn reserved_word_as_string(s: &ReservedWord) -> &'static str {
     use ReservedWord::*;
     match s {

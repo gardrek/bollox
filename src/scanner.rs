@@ -24,16 +24,19 @@ pub struct Scanner {
     eof: bool,
     // whether scanning encountered an error
     had_error: bool,
+    // whether or not compatibility mode is enabled
+    compatibility: bool,
 }
 
 impl Scanner {
-    pub fn new(src: &str, source_id: SourceId) -> Scanner {
+    pub fn new(src: &str, source_id: SourceId, compatibility: bool) -> Scanner {
         Scanner {
             source: Source::new(src),
             source_id,
             cursor: 0,
             eof: false,
             had_error: false,
+            compatibility,
         }
     }
 
@@ -330,7 +333,15 @@ impl Scanner {
         let slicing = self.source.get_slice(&location);
 
         let kind = if let Some(word) = string_as_reserved_word(slicing) {
-            TokenKind::Reserved(word)
+            if word.is_modal() && self.compatibility {
+                let sym = {
+                    let mut interner = INTERNER.write().unwrap();
+                    interner.get_or_intern(slicing)
+                };
+                TokenKind::Identifier(sym)
+            } else {
+                TokenKind::Reserved(word)
+            }
         } else {
             let sym = {
                 let mut interner = INTERNER.write().unwrap();

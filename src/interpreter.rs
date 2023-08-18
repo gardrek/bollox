@@ -293,11 +293,14 @@ impl Interpreter {
     }
 
     pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
+        /*
         if self.compatibility_mode {
             Environment::new_inner(self.environment.clone())
         } else {
             self.environment.borrow().flat_copy()
         }
+        */
+        Environment::new_inner(self.environment.clone())
     }
 
     pub fn interpret_statement(&mut self, statement: &Stmt) -> Result<Object, ControlFlow> {
@@ -359,7 +362,11 @@ impl Interpreter {
 
                 for stmt in method_decls {
                     let (name, func) = match &stmt.kind {
-                        StmtKind::FunctionDeclaration(_, name, func) => (name, func),
+                        StmtKind::FunctionDeclaration {
+                            global: _,
+                            name,
+                            func,
+                        } => (name, func),
                         _ => {
                             return Err(RuntimeError::ice(
                                 "statement in class is not a method or associated function. bad syntax tree",
@@ -380,7 +387,11 @@ impl Interpreter {
 
                 for stmt in associated_decls {
                     let (name, func) = match &stmt.kind {
-                        StmtKind::FunctionDeclaration(_, name, func) => (name, func),
+                        StmtKind::FunctionDeclaration {
+                            global: _,
+                            name,
+                            func,
+                        } => (name, func),
                         _ => {
                             return Err(RuntimeError::ice(
                                 "statement in class is not a method or associated function. bad syntax tree",
@@ -415,7 +426,7 @@ impl Interpreter {
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
-            FunctionDeclaration(global, name, func) => {
+            FunctionDeclaration { global, name, func } => {
                 let closure = self.create_closure();
 
                 let mut new_func = func.clone();
@@ -448,15 +459,19 @@ impl Interpreter {
             Return(expr) => {
                 return Err(ControlFlow::Return(self.evaluate(expr)?));
             }
-            VariableDeclaration(global, sym, maybe_init) => {
+            VariableDeclaration {
+                global,
+                name,
+                initializer: maybe_init,
+            } => {
                 let obj = match maybe_init {
                     Some(init) => self.evaluate(init)?,
                     None => Object::Nil,
                 };
                 if *global {
-                    self.globals.borrow_mut().define(sym, obj);
+                    self.globals.borrow_mut().define(name, obj);
                 } else {
-                    self.environment.borrow_mut().define(sym, obj);
+                    self.environment.borrow_mut().define(name, obj);
                 }
                 Object::Nil
             }
@@ -865,10 +880,14 @@ impl Interpreter {
                 .get_binding(sym)
                 .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?,
             Assign(sym, expr) => {
-                if self.environment.borrow().is_defined(sym) {
-                    let value = self.evaluate(expr)?;
+                let value = self.evaluate(expr)?;
 
+                if self.environment.borrow().is_defined(sym) {
                     self.environment.borrow_mut().assign(*sym, value.clone());
+
+                    value
+                } else if self.globals.borrow().is_defined(sym) {
+                    self.globals.borrow_mut().assign(*sym, value.clone());
 
                     value
                 } else {
@@ -1132,10 +1151,10 @@ impl Interpreter {
                     }
                 }
             }
-            IndexAssign(obj_expr, index, val) => {
-                let location = obj_expr.location.clone();
+            IndexAssign { obj, index, val } => {
+                let location = obj.location.clone();
 
-                let obj = self.evaluate(obj_expr)?;
+                let obj = self.evaluate(obj)?;
 
                 let index = match self.evaluate(index)? {
                     Object::Number(n) => {

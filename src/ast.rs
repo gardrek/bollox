@@ -28,11 +28,19 @@ pub enum StmtKind {
         associated_funcs: Vec<Stmt>,
     },
     Expr(Expr),
-    FunctionDeclaration(bool, Sym, LoxFunction),
+    FunctionDeclaration {
+        global: bool,
+        name: Sym,
+        func: LoxFunction,
+    },
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr),
-    VariableDeclaration(bool, Sym, Option<Expr>),
+    VariableDeclaration {
+        global: bool,
+        name: Sym,
+        initializer: Option<Expr>,
+    },
     While(Expr, Box<Stmt>),
 }
 
@@ -60,7 +68,11 @@ pub enum ExprKind {
     ArrayConstructor(Vec<Expr>),
     ArrayConstructorMulti(Box<Expr>, Box<Expr>),
     Index(Box<Expr>, Box<Expr>),
-    IndexAssign(Box<Expr>, Box<Expr>, Box<Expr>),
+    IndexAssign {
+        obj: Box<Expr>,
+        index: Box<Expr>,
+        val: Box<Expr>,
+    },
 }
 
 impl fmt::Display for Stmt {
@@ -100,15 +112,16 @@ impl fmt::Display for StmtKind {
                 write!(f, "(class-stmt {l} {})", crate::object::sym_to_str(name))
             }
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
-            StmtKind::FunctionDeclaration(
+            StmtKind::FunctionDeclaration {
                 global,
                 name,
-                LoxFunction {
-                    parameters,
-                    body,
-                    closure: _,
-                },
-            ) => {
+                func:
+                    LoxFunction {
+                        parameters,
+                        body,
+                        closure: _,
+                    },
+            } => {
                 let l = if *global { "global" } else { "local" };
                 write!(f, "(fun-stmt {l} {} (", crate::object::sym_to_str(name))?;
                 for p in parameters {
@@ -126,17 +139,21 @@ impl fmt::Display for StmtKind {
             },
             StmtKind::Print(expr) => write!(f, "(print-stmt {})", expr),
             StmtKind::Return(expr) => write!(f, "(return-stmt {})", expr),
-            StmtKind::VariableDeclaration(global, sym, expr) => {
+            StmtKind::VariableDeclaration {
+                global,
+                name,
+                initializer,
+            } => {
                 let l = if *global { "global" } else { "local" };
-                match expr {
+                match initializer {
                     Some(e) => write!(
                         f,
                         "(var-stmt {} {} {})",
                         l,
-                        crate::object::sym_to_str(sym),
+                        crate::object::sym_to_str(name),
                         e
                     ),
-                    None => write!(f, "(var-stmt {} {})", l, crate::object::sym_to_str(sym)),
+                    None => write!(f, "(var-stmt {} {})", l, crate::object::sym_to_str(name)),
                 }
             }
             StmtKind::While(cond, body) => write!(f, "(while-stmt {} {})", cond, body),
@@ -178,7 +195,7 @@ impl fmt::Display for ExprKind {
             }
             ArrayConstructorMulti(obj, multi) => write!(f, "(array-multi {} {})", obj, multi),
             Index(obj, index) => write!(f, "(index {} {})", obj, index),
-            IndexAssign(obj, index, val) => write!(f, "(index {} {} {})", obj, index, val),
+            IndexAssign { obj, index, val } => write!(f, "(index {} {} {})", obj, index, val),
         }
     }
 }
