@@ -1,6 +1,6 @@
-
+var cycles = 10;
 var time = 0;
-while true {
+while cycles > 0 {
     var start = clock();
 
     while (clock() < start + 1) {
@@ -10,4 +10,6 @@ while true {
     time = clock() / 1;
 
     print time;
+
+    cycles = cycles - 1;
 }

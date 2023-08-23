@@ -14,6 +14,7 @@ pub enum Error {
     ManyErrors(Vec<Error>),
     Parser(ParseError),
     BreakOutsideLoop,
+    Other(String),
 }
 
 impl Error {
@@ -45,6 +46,7 @@ impl fmt::Display for Error {
             ManyErrors(_) => write!(f, "Many Errors"),
             Parser(st) => write!(f, "{}", st),
             BreakOutsideLoop => write!(f, "Break Outside Loop"),
+            Other(st) => write!(f, "{}", st),
         }
     }
 }
@@ -54,6 +56,12 @@ impl From<io::Error> for Error {
         // TODO: match on io::Error maybe?
         //~ Error::Io(error)
         Error::Io
+    }
+}
+
+impl From<String> for Error {
+    fn from(error: String) -> Self {
+        Error::Other(error)
     }
 }
 

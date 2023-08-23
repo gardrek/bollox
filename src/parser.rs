@@ -377,7 +377,7 @@ impl Parser {
         let superclass = if self.advance_if_match(TokenKind::Op(Operator::Less)) {
             let name = self.consume_identifier()?;
 
-            Some(name)
+            Some((name, None))
         } else {
             None
         };
@@ -617,7 +617,7 @@ impl Parser {
 
         let counter_function = Expr {
             location: SourceLocation::bullshit(),
-            kind: ExprKind::VariableAccess(iter_name),
+            kind: ExprKind::VariableAccess(iter_name, None),
         };
 
         let counter_expr = Expr {
@@ -627,12 +627,12 @@ impl Parser {
 
         let counter_next = Stmt::new(StmtKind::Expr(Expr {
             location: SourceLocation::bullshit(),
-            kind: ExprKind::Assign(counter_name, Box::new(counter_expr)),
+            kind: ExprKind::Assign(counter_name, Box::new(counter_expr), None),
         }));
 
         let condition = Expr {
             location: SourceLocation::bullshit(),
-            kind: ExprKind::VariableAccess(counter_name),
+            kind: ExprKind::VariableAccess(counter_name, None),
         };
 
         let if_statement = Stmt::new(StmtKind::If(condition.clone(), body, None));
@@ -722,7 +722,7 @@ impl Parser {
 
         let subject_access = Expr {
             location: subject.location.clone(),
-            kind: ExprKind::VariableAccess(subject_name),
+            kind: ExprKind::VariableAccess(subject_name, None),
         };
 
         let subject_declaration = Stmt::new(StmtKind::VariableDeclaration {
@@ -930,9 +930,9 @@ impl Parser {
             };
 
             return Ok(match expr.kind {
-                ExprKind::VariableAccess(name) => Expr {
+                ExprKind::VariableAccess(name, _depth) => Expr {
                     location: expr.location,
-                    kind: ExprKind::Assign(name, r_expr),
+                    kind: ExprKind::Assign(name, r_expr, None),
                 },
                 ExprKind::PropertyAccess(obj, name) => Expr {
                     location: expr.location,
@@ -1214,7 +1214,7 @@ impl Parser {
 
                     Ok(Expr {
                         location,
-                        kind: ExprKind::VariableAccess(sym),
+                        kind: ExprKind::VariableAccess(sym, None),
                     })
                 }
                 _ => Err(self.error(ParseErrorKind::UnexpectedToken(next_token.clone()))),

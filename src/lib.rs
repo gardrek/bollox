@@ -10,6 +10,7 @@ pub mod source;
 
 pub mod ast;
 pub mod object;
+pub mod resolver;
 pub mod result;
 pub mod scanner;
 
@@ -46,13 +47,14 @@ pub fn run_string(
         Scanner::new(&source, SourceId(id), compatibility_mode),
         compatibility_mode,
     );
-    let statements = parser.parse_all()?;
+
+    let mut statements = parser.parse_all()?;
 
     let had_error = !parser.errors.is_empty();
 
     if had_error {
         //~ if true {
-        for e in parser.errors {
+        for e in parser.errors.iter() {
             eprintln!(
                 "error on line {:?}: {} `{}`",
                 crate::source::SourceLocation::error_line_number(
@@ -72,10 +74,34 @@ pub fn run_string(
         }
         eprintln!();
         //~ */
-        return Ok(None);
+        //~ return Ok(None);
+        return Err(result::Error::ManyErrors(
+            parser.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
 
-    let mut interpreter = Interpreter::new_with_stdlib(compatibility_mode);
+    let mut resolver = resolver::Resolver::default();
+
+    resolver.resolve_all(&mut statements[..]);
+
+    let mut had_error = false;
+
+    for err in resolver.errors.iter() {
+        eprintln!("resolver error: {}", err);
+        had_error = true;
+    }
+
+    for warn in resolver.warnings.iter() {
+        eprintln!("resolver warning: {}", warn);
+    }
+
+    if had_error {
+        return Err(result::Error::ManyErrors(
+            resolver.errors.into_iter().map(|e| e.into()).collect(),
+        ));
+    }
+
+    let mut interpreter = Interpreter::new_with_stdlib();
 
     let obj = match interpreter.interpret_slice(&statements[..]) {
         Ok(obj) => obj,

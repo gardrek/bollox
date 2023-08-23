@@ -35,7 +35,7 @@ fn run() -> GenericResult {
                 Scanner::new("", SourceId(0), clargs.compatibility),
                 clargs.compatibility,
             );
-            let mut interpreter = Interpreter::new_with_stdlib(clargs.compatibility);
+            let mut interpreter = Interpreter::new_with_stdlib();
 
             loop {
                 write!(stdout, "> ")?;
@@ -45,7 +45,11 @@ fn run() -> GenericResult {
                 parser.push_source_string(&input);
 
                 // TODO: handle errors instead of crashing
-                let statements = parser.parse_all()?;
+                let mut statements = parser.parse_all()?;
+
+                let mut resolver = bollox::resolver::Resolver::default();
+
+                resolver.resolve_all(&mut statements[..]);
 
                 if parser.errors.is_empty() {
                     match interpreter.interpret_slice(&statements[..]) {
@@ -92,14 +96,14 @@ fn run() -> GenericResult {
         }
     };
 
-    match result {
+    match &result {
         Ok(_o) => Ok(()),
         Err(e) => {
             match e.get_location() {
                 Some(loc) => eprintln!("{} at {}", e, loc),
                 _ => eprintln!("{:?}", e),
             }
-            Ok(())
+            Ok(result?)
         }
     }
 }

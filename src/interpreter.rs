@@ -11,103 +11,6 @@ use crate::INTERNER;
 
 use string_interner::Sym;
 
-/*
-use std::collections::HashSet;
-
-trait EnvTrait {
-    fn define(&mut self, sym: &Sym, value: Object);
-    fn assign(&mut self, sym: &Sym, value: Object);
-    fn get(&self, sym: &Sym) -> Option<Object>;
-    fn is_defined(&self, sym: &Sym) -> bool;
-}
-
-impl EnvTrait for Environment {
-    fn define(&mut self, sym: &Sym, value: Object) {
-        self.define(sym, value);
-    }
-
-    fn assign(&mut self, sym: &Sym, value: Object) {
-        self.assign(*sym, value);
-    }
-
-    fn get(&self, sym: &Sym) -> Option<Object> {
-        self.get_by_sym(sym)
-    }
-
-    fn is_defined(&self, sym: &Sym) -> bool {
-        self.is_defined(sym)
-    }
-}
-
-impl EnvTrait for Closure {
-    fn define(&mut self, _sym: &Sym, _value: Object) {
-        panic!();
-    }
-
-    fn assign(&mut self, sym: &Sym, value: Object) {
-        if self.bindings.contains(sym) {
-            self.enclosing.borrow_mut().assign(sym, value)
-        }
-    }
-
-    fn get(&self, sym: &Sym) -> Option<Object> {
-        if self.bindings.contains(sym) {
-            self.enclosing.borrow().get(sym)
-        } else {
-            None
-        }
-    }
-
-    fn is_defined(&self, sym: &Sym) -> bool {
-        self.bindings.contains(sym)
-    }
-}
-
-impl EnvTrait for EnvOrClosure {
-    fn define(&mut self, sym: &Sym, value: Object) {
-        use EnvOrClosure::*;
-        match self {
-            Env(e) => EnvTrait::define(e, sym, value),
-            Clos(e) => EnvTrait::define(e, sym, value),
-        }
-    }
-
-    fn assign(&mut self, sym: &Sym, value: Object) {
-        use EnvOrClosure::*;
-        match self {
-            Env(e) => EnvTrait::assign(e, sym, value),
-            Clos(e) => EnvTrait::assign(e, sym, value),
-        }
-    }
-
-    fn get(&self, sym: &Sym) -> Option<Object> {
-        use EnvOrClosure::*;
-        match self {
-            Env(e) => EnvTrait::get(e, sym),
-            Clos(e) => EnvTrait::get(e, sym),
-        }
-    }
-
-    fn is_defined(&self, sym: &Sym) -> bool {
-        use EnvOrClosure::*;
-        match self {
-            Env(e) => EnvTrait::is_defined(e, sym),
-            Clos(e) => EnvTrait::is_defined(e, sym),
-        }
-    }
-}
-
-pub enum EnvOrClosure {
-    Env(Environment),
-    Clos(Closure),
-}
-
-pub struct Closure {
-    enclosing: Rc<RefCell<EnvOrClosure>>,
-    bindings: HashSet<Sym>,
-}
-//~ */
-
 #[derive(Debug, Default)]
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
@@ -116,7 +19,6 @@ pub struct Environment {
 
 #[derive(Default)]
 pub struct Interpreter {
-    compatibility_mode: bool,
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
     pub native_methods: HashMap<Sym, NativeClass>,
@@ -163,9 +65,8 @@ impl Environment {
         self.bindings.insert(*sym, obj)
     }
 
+/*
     fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-        //~ if self.bindings.contains_key(&sym) {
-        //~     self.bindings.insert(sym, obj)
         if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(sym) {
             Some(e.insert(obj))
         } else if let Some(enc) = &mut self.enclosing {
@@ -184,6 +85,7 @@ impl Environment {
             false
         }
     }
+*/
 
     fn get_by_sym(&self, sym: &Sym) -> Option<Object> {
         let obj = self.bindings.get(sym);
@@ -196,6 +98,42 @@ impl Environment {
             None
         }
     }
+
+    fn get_at_depth(&self, sym: &Sym, depth: usize) -> Option<Object> {
+        if depth == 0 {
+            self.bindings.get(sym).cloned()
+        } else if let Some(enc) = &self.enclosing {
+            enc.borrow().get_at_depth(sym, depth - 1)
+        } else {
+            None
+        }
+    }
+
+    fn set_at_depth(&mut self, sym: &Sym, depth: usize, obj: Object) -> Option<Object> {
+        if depth == 0 {
+            self.bindings.insert(*sym, obj)
+        } else if let Some(enc) = &self.enclosing {
+            enc.borrow_mut().set_at_depth(sym, depth - 1, obj)
+        } else {
+            None
+        }
+    }
+
+/*
+    fn assign_at_depth(&mut self, sym: &Sym, obj: Object, depth: usize) -> Option<Object> {
+        if depth == 0 {
+            if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(*sym) {
+                Some(e.insert(obj))
+            } else {
+                None
+            }
+        } else if let Some(enc) = &mut self.enclosing {
+            enc.borrow_mut().assign_at_depth(sym, obj, depth - 1)
+        } else {
+            None
+        }
+    }
+*/
 
     pub fn flat_copy(&self) -> Rc<RefCell<Environment>> {
         let bindings = self.bindings_flattened();
@@ -248,19 +186,15 @@ impl Environment {
 }
 
 impl Interpreter {
-    pub fn new(compatibility_mode: bool) -> Interpreter {
-        Interpreter {
-            compatibility_mode,
-            ..Interpreter::default()
-        }
+    pub fn new() -> Interpreter {
+        Interpreter::default()
     }
 
-    pub fn new_with_stdlib(compatibility_mode: bool) -> Interpreter {
+    pub fn new_with_stdlib() -> Interpreter {
         let mut globals = Environment::default();
         crate::stdlib::init_global_environment(&mut globals);
 
         let mut interpreter = Interpreter {
-            compatibility_mode,
             globals: Rc::new(RefCell::new(globals)),
             ..Interpreter::default()
         };
@@ -292,14 +226,23 @@ impl Interpreter {
         }
     }
 
-    pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
-        /*
-        if self.compatibility_mode {
-            Environment::new_inner(self.environment.clone())
+    fn get_at_depth(&self, sym: &Sym, depth: Option<usize>) -> Option<Object> {
+        if let Some(depth) = depth {
+            self.environment.borrow().get_at_depth(sym, depth)
         } else {
-            self.environment.borrow().flat_copy()
+            self.globals.borrow().bindings.get(sym).cloned()
         }
-        */
+    }
+
+    fn set_at_depth(&mut self, sym: &Sym, depth: Option<usize>, obj: Object) -> Option<Object> {
+        if let Some(depth) = depth {
+            self.environment.borrow_mut().set_at_depth(sym, depth, obj)
+        } else {
+            self.globals.borrow_mut().bindings.insert(*sym, obj)
+        }
+    }
+
+    pub fn create_closure(&self) -> Rc<RefCell<Environment>> {
         Environment::new_inner(self.environment.clone())
     }
 
@@ -325,15 +268,16 @@ impl Interpreter {
             ClassDeclaration {
                 global,
                 name,
-                superclass: superclass_name,
+                superclass,
                 methods: method_decls,
                 associated_funcs: associated_decls,
             } => {
                 let method_environment = self.create_closure();
 
-                let superclass = if let Some(superclass_name) = superclass_name {
+                let superclass = if let Some((superclass_name, depth)) = superclass {
+                    // TODO: with the resolver this should probably be an ICE?
                     let superclass = self
-                        .get_binding(superclass_name)
+                        .get_at_depth(superclass_name, *depth)
                         .ok_or(RuntimeError::undefined_variable(SourceLocation::bullshit()))?;
 
                     let super_name = {
@@ -418,7 +362,8 @@ impl Interpreter {
                 if *global {
                     self.globals.borrow_mut().define(name, obj);
                 } else {
-                    method_environment.borrow_mut().define(name, obj.clone());
+                    // FIXME: this is probably unnecessary and technicaclly a bug with new resolver
+                    //~ method_environment.borrow_mut().define(name, obj.clone());
 
                     self.environment.borrow_mut().define(name, obj);
                 }
@@ -438,7 +383,8 @@ impl Interpreter {
                 if *global {
                     self.globals.borrow_mut().define(name, obj);
                 } else {
-                    closure.borrow_mut().define(name, obj.clone());
+                    // FIXME: probably needs removed
+                    //~ closure.borrow_mut().define(name, obj.clone());
                     self.environment.borrow_mut().define(name, obj);
                 }
 
@@ -876,12 +822,21 @@ impl Interpreter {
                 }
             }
             Grouping(inside) => self.evaluate(inside)?,
-            VariableAccess(sym) => self
-                .get_binding(sym)
-                .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?,
-            Assign(sym, expr) => {
+            VariableAccess(sym, depth) => {
+                self.get_at_depth(sym, *depth)
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
+                /*
+                self
+                    .get_binding(sym)
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
+                */
+            }
+            Assign(sym, expr, depth) => {
                 let value = self.evaluate(expr)?;
 
+                self.set_at_depth(sym, *depth, value.clone())
+                    .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?;
+                /*
                 if self.environment.borrow().is_defined(sym) {
                     self.environment.borrow_mut().assign(*sym, value.clone());
 
@@ -893,6 +848,9 @@ impl Interpreter {
                 } else {
                     return Err(RuntimeError::undefined_variable(expr.location.clone()).into());
                 }
+                */
+
+                value
             }
             LogicalOr(left, right) => {
                 let value = self.evaluate(left)?;

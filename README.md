@@ -14,13 +14,15 @@
 
 # Differences compared to standard Lox #
 
+A file can return from the top level. A call to `require` returns whatever the file returned.
+
+Warnings for unused variables, except if the variable starts with `_`. Also warning for initializing a variable and then immediately overwriting it.
+
 Hexadecimal integers as in `0xf3`
 
 All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode variable, function, and class declarations in the top-level scope of a file default to being global. For the rare use case that you require compatibility mode, you can use the `local` decorator to declare something as local in the top-level scope. The local decorator is always allowed but has no effect in other contexts.
 
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
-
-There is no static analysis pass, so some things that would have been compile-time errors in Lox are runtime errors in Bollox. For instance, a class still cannot inherit from itself, simply because the variable is not yet defined in the environment in which the superclass is first looked up.
 
 Remainder operator `a % b`
 
@@ -101,13 +103,12 @@ Supports:
 - anonymous functions with the syntax `fun(...) { ... }`.
 - break statements with simple `break;` syntax.
 - associated functions on classes with `class func_name(...) {...}` and `ClassName.func_name(...)`
+- warnings for unused variables
 
 
 
 
 ## Minor differences ##
-
-Some things that are errors in Lox are allowed by `bollox`, such as `return` from outside any function, or redefining a variable that is the parameter of the current function. These two are intentional changes. `require` allows you to use the returned value from the top level of a file. And it just didn't make sense to me that redefining a variable is *sometimes* an error.
 
 Many error messages are quite different. Errors are not currently in the best shape.
 
