@@ -338,7 +338,7 @@ impl Resolver {
                     sym_to_str(name)
                 )),
                 ReassignedConstant => self
-                    .errors
+                    .warnings
                     .push(format!("Constant `{}` re-assigned.", sym_to_str(name))),
                 Used | UsedConstant => (),
             }

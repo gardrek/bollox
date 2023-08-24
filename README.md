@@ -24,6 +24,8 @@ Hexadecimal integers as in `0xf3`
 
 All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode, variable, function, and class declarations in the top-level scope of a file default to being global.
 
+All variable declarations are reassignable by default but you can add the `const` decorator as inf `const var x` or `global const var x` to make it an warning to reassign. This can be done for class and function declarations as well. In addition, function parameters are declared const as well.
+
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 
 Remainder operator `a % b`
