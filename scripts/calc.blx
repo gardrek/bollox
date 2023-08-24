@@ -1,4 +1,4 @@
-var List = require("scripts/list.blx");
+const var List = require("scripts/list.blx");
 
 class DefaultStack < List {
     init(default) {
@@ -17,7 +17,7 @@ class DefaultStack < List {
 }
 
 var stack = DefaultStack(0);
-var input = "";
+var input;
 var wait_for_input = true;
 
 fun concat_list(acc, v) {

@@ -65,27 +65,27 @@ impl Environment {
         self.bindings.insert(*sym, obj)
     }
 
-/*
-    fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-        if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(sym) {
-            Some(e.insert(obj))
-        } else if let Some(enc) = &mut self.enclosing {
-            enc.borrow_mut().assign(sym, obj)
-        } else {
-            None
+    /*
+        fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
+            if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(sym) {
+                Some(e.insert(obj))
+            } else if let Some(enc) = &mut self.enclosing {
+                enc.borrow_mut().assign(sym, obj)
+            } else {
+                None
+            }
         }
-    }
 
-    fn is_defined(&self, sym: &Sym) -> bool {
-        if self.bindings.contains_key(sym) {
-            true
-        } else if let Some(enc) = &self.enclosing {
-            enc.borrow().is_defined(sym)
-        } else {
-            false
+        fn is_defined(&self, sym: &Sym) -> bool {
+            if self.bindings.contains_key(sym) {
+                true
+            } else if let Some(enc) = &self.enclosing {
+                enc.borrow().is_defined(sym)
+            } else {
+                false
+            }
         }
-    }
-*/
+    */
 
     fn get_by_sym(&self, sym: &Sym) -> Option<Object> {
         let obj = self.bindings.get(sym);
@@ -119,21 +119,21 @@ impl Environment {
         }
     }
 
-/*
-    fn assign_at_depth(&mut self, sym: &Sym, obj: Object, depth: usize) -> Option<Object> {
-        if depth == 0 {
-            if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(*sym) {
-                Some(e.insert(obj))
+    /*
+        fn assign_at_depth(&mut self, sym: &Sym, obj: Object, depth: usize) -> Option<Object> {
+            if depth == 0 {
+                if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(*sym) {
+                    Some(e.insert(obj))
+                } else {
+                    None
+                }
+            } else if let Some(enc) = &mut self.enclosing {
+                enc.borrow_mut().assign_at_depth(sym, obj, depth - 1)
             } else {
                 None
             }
-        } else if let Some(enc) = &mut self.enclosing {
-            enc.borrow_mut().assign_at_depth(sym, obj, depth - 1)
-        } else {
-            None
         }
-    }
-*/
+    */
 
     pub fn flat_copy(&self) -> Rc<RefCell<Environment>> {
         let bindings = self.bindings_flattened();
@@ -259,14 +259,15 @@ impl Interpreter {
                 }
                 Object::Nil
             }
-            Break(expr) => {
-                return Err(ControlFlow::Break(match expr {
+            Break(break_expr) => {
+                return Err(ControlFlow::Break(match break_expr {
                     Some(e) => Some(self.evaluate(e)?),
                     None => None,
                 }));
             }
             ClassDeclaration {
                 global,
+                constant: _,
                 name,
                 superclass,
                 methods: method_decls,
@@ -308,6 +309,7 @@ impl Interpreter {
                     let (name, func) = match &stmt.kind {
                         StmtKind::FunctionDeclaration {
                             global: _,
+                            constant: _,
                             name,
                             func,
                         } => (name, func),
@@ -333,6 +335,7 @@ impl Interpreter {
                     let (name, func) = match &stmt.kind {
                         StmtKind::FunctionDeclaration {
                             global: _,
+                            constant: _,
                             name,
                             func,
                         } => (name, func),
@@ -371,7 +374,12 @@ impl Interpreter {
                 Object::Nil
             }
             Expr(expr) => self.evaluate(expr)?,
-            FunctionDeclaration { global, name, func } => {
+            FunctionDeclaration {
+                global,
+                constant: _,
+                name,
+                func,
+            } => {
                 let closure = self.create_closure();
 
                 let mut new_func = func.clone();
@@ -407,6 +415,7 @@ impl Interpreter {
             }
             VariableDeclaration {
                 global,
+                constant: _,
                 name,
                 initializer: maybe_init,
             } => {
@@ -831,8 +840,8 @@ impl Interpreter {
                     .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?
                 */
             }
-            Assign(sym, expr, depth) => {
-                let value = self.evaluate(expr)?;
+            Assign(sym, assign_expr, depth) => {
+                let value = self.evaluate(assign_expr)?;
 
                 self.set_at_depth(sym, *depth, value.clone())
                     .ok_or(RuntimeError::undefined_variable(expr.location.clone()))?;
@@ -1031,10 +1040,10 @@ impl Interpreter {
 
                 Object::Array(Rc::new(RefCell::new(v)))
             }
-            ArrayConstructorMulti(expr, multi) => {
+            ArrayConstructorMulti(value_expr, multi) => {
                 let location = multi.location.clone();
 
-                let value = self.evaluate(expr)?;
+                let value = self.evaluate(value_expr)?;
 
                 let multi_value = match self.evaluate(multi)? {
                     Object::Number(n) => {

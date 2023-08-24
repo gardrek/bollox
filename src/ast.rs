@@ -22,6 +22,7 @@ pub enum StmtKind {
     Break(Option<Expr>),
     ClassDeclaration {
         global: bool,
+        constant: bool,
         name: Sym,
         superclass: Option<(Sym, Option<usize>)>,
         methods: Vec<Stmt>,
@@ -30,6 +31,7 @@ pub enum StmtKind {
     Expr(Expr),
     FunctionDeclaration {
         global: bool,
+        constant: bool,
         name: Sym,
         func: LoxFunction,
     },
@@ -38,6 +40,7 @@ pub enum StmtKind {
     Return(Expr),
     VariableDeclaration {
         global: bool,
+        constant: bool,
         name: Sym,
         initializer: Option<Expr>,
     },
@@ -114,6 +117,7 @@ impl fmt::Display for StmtKind {
             StmtKind::Expr(expr) => write!(f, "(expr-stmt {})", expr),
             StmtKind::FunctionDeclaration {
                 global,
+                constant,
                 name,
                 func:
                     LoxFunction {
@@ -123,7 +127,8 @@ impl fmt::Display for StmtKind {
                     },
             } => {
                 let l = if *global { "global" } else { "local" };
-                write!(f, "(fun-stmt {l} {} (", crate::object::sym_to_str(name))?;
+                let m = if *constant { "const" } else { "mut" };
+                write!(f, "(fun-stmt {l} {m} {} (", crate::object::sym_to_str(name))?;
                 for p in parameters {
                     write!(f, " {}", crate::object::sym_to_str(p))?;
                 }
@@ -141,15 +146,16 @@ impl fmt::Display for StmtKind {
             StmtKind::Return(expr) => write!(f, "(return-stmt {})", expr),
             StmtKind::VariableDeclaration {
                 global,
+                constant,
                 name,
                 initializer,
             } => {
                 let l = if *global { "global" } else { "local" };
+                let m = if *constant { "const" } else { "mut" };
                 match initializer {
                     Some(e) => write!(
                         f,
-                        "(var-stmt {} {} {})",
-                        l,
+                        "(var-stmt {l} {m} {} {})",
                         crate::object::sym_to_str(name),
                         e
                     ),

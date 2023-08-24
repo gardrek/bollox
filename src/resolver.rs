@@ -11,6 +11,7 @@ use string_interner::Sym;
 #[derive(Default)]
 pub struct Resolver {
     scopes: Vec<HashMap<Sym, VariableState>>,
+    global_scope: HashMap<Sym, VariableState>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     function_kind: Option<FunctionKind>,
@@ -35,6 +36,10 @@ enum VariableState {
     Initialized,
     AssignedBeforeUse,
     Used,
+    DeclaredConstant,
+    InitializedConstant,
+    ReassignedConstant,
+    UsedConstant,
 }
 
 impl Resolver {
@@ -44,6 +49,8 @@ impl Resolver {
             self.resolve_statement(s);
         }
         self.end_scope();
+        let scope = &std::mem::take(&mut self.global_scope);
+        self.evaluate_scope(scope);
     }
 
     fn resolve_statement(&mut self, stmt: &mut Stmt) {
@@ -63,6 +70,7 @@ impl Resolver {
             }
             ClassDeclaration {
                 global,
+                constant,
                 name,
                 superclass,
                 methods,
@@ -71,8 +79,11 @@ impl Resolver {
                 let prev_kind = self.class_kind.take();
                 self.class_kind = Some(ClassKind::Class);
 
-                if !*global {
-                    self.declare(name);
+                if *global {
+                    self.declare_global(name, *constant);
+                    self.init_variable(name, None);
+                } else {
+                    self.declare(name, *constant);
                     self.init_variable(name, Some(0));
                 }
 
@@ -91,7 +102,7 @@ impl Resolver {
                         interner.get_or_intern("super")
                     };
 
-                    self.declare(&super_sym);
+                    self.declare(&super_sym, *constant);
                     self.use_variable(&super_sym, Some(0));
                 }
 
@@ -120,9 +131,17 @@ impl Resolver {
                 self.class_kind = prev_kind;
             }
             Expr(expr) => self.resolve_expression(expr),
-            FunctionDeclaration { global, name, func } => {
-                if !*global {
-                    self.declare(name);
+            FunctionDeclaration {
+                global,
+                constant,
+                name,
+                func,
+            } => {
+                if *global {
+                    self.declare_global(name, *constant);
+                    self.init_variable(name, None);
+                } else {
+                    self.declare(name, *constant);
                     self.init_variable(name, Some(0));
                 }
                 self.resolve_function(func, FunctionKind::Function);
@@ -138,14 +157,20 @@ impl Resolver {
             Return(expr) => self.resolve_expression(expr),
             VariableDeclaration {
                 global,
+                constant,
                 name,
                 initializer,
             } => {
                 if let Some(e) = initializer {
                     self.resolve_expression(e);
                 }
-                if !*global {
-                    self.declare(name);
+                if *global {
+                    self.declare_global(name, *constant);
+                    if initializer.is_some() {
+                        self.init_variable(name, None);
+                    }
+                } else {
+                    self.declare(name, *constant);
                     if initializer.is_some() {
                         self.init_variable(name, Some(0));
                     }
@@ -265,14 +290,14 @@ impl Resolver {
                 interner.get_or_intern("this")
             };
 
-            self.declare(&this);
+            self.declare(&this, true);
             self.use_variable(&this, Some(0)); // supress "unused variable this" everywhere
         }
 
         self.begin_scope(); // environment created at function call
 
         for name in func.parameters.iter() {
-            self.declare(name);
+            self.declare(name, true);
         }
 
         for s in func.body.iter_mut() {
@@ -292,33 +317,105 @@ impl Resolver {
 
     fn end_scope(&mut self) {
         if let Some(scope) = self.scopes.pop() {
-            for (name, usage) in scope.iter() {
-                match usage {
-                    VariableState::Declared | VariableState::Initialized => {
-                        let name = sym_to_str(name);
-                        if let Some(b'_') = name.as_bytes().first() {
-                            // do nothing
-                        } else {
-                            self.warnings.push(format!("Unused variable `{}`.", name))
-                        }
+            self.evaluate_scope(&scope);
+        }
+    }
+
+    fn evaluate_scope(&mut self, scope: &HashMap<Sym, VariableState>) {
+        for (name, usage) in scope.iter() {
+            use VariableState::*;
+            match usage {
+                Declared | Initialized | DeclaredConstant | InitializedConstant => {
+                    let name = sym_to_str(name);
+                    if let Some(b'_') = name.as_bytes().first() {
+                        // do nothing
+                    } else {
+                        self.warnings.push(format!("Unused variable `{}`.", name))
                     }
-                    VariableState::AssignedBeforeUse => self.warnings.push(format!(
-                        "Variable `{}` re-assigned before use.",
-                        sym_to_str(name)
-                    )),
-                    VariableState::Used => (),
                 }
+                AssignedBeforeUse => self.warnings.push(format!(
+                    "Variable `{}` re-assigned before use.",
+                    sym_to_str(name)
+                )),
+                ReassignedConstant => self
+                    .errors
+                    .push(format!("Constant `{}` re-assigned.", sym_to_str(name))),
+                Used | UsedConstant => (),
             }
         }
     }
 
-    fn declare(&mut self, name: &Sym) {
+    fn declare(&mut self, name: &Sym, constant: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(name) {
                 self.errors
                     .push("Already a variable with this name in this scope.".to_string());
             }
-            scope.insert(*name, VariableState::Declared);
+            let declared = if constant {
+                VariableState::DeclaredConstant
+            } else {
+                VariableState::Declared
+            };
+            scope.insert(*name, declared);
+        }
+    }
+
+    fn declare_global(&mut self, name: &Sym, constant: bool) {
+        let declared = if constant {
+            VariableState::DeclaredConstant
+        } else {
+            VariableState::Declared
+        };
+        self.global_scope.insert(*name, declared);
+    }
+
+    fn init_in_scope(scope: &mut HashMap<Sym, VariableState>, name: &Sym) -> Option<()> {
+        if let Some(state) = scope.get_mut(name) {
+            use VariableState::*;
+            match state {
+                Declared => *state = Initialized,
+                Initialized => *state = AssignedBeforeUse,
+                Used | AssignedBeforeUse => (),
+                DeclaredConstant => *state = InitializedConstant,
+                InitializedConstant | UsedConstant => *state = ReassignedConstant,
+                ReassignedConstant => (),
+            }
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn assign_in_scope(scope: &mut HashMap<Sym, VariableState>, name: &Sym) -> Option<()> {
+        if let Some(state) = scope.get_mut(name) {
+            use VariableState::*;
+            match state {
+                Declared => *state = Used, // ??
+                Initialized => *state = AssignedBeforeUse,
+                Used | AssignedBeforeUse => (),
+                DeclaredConstant => *state = InitializedConstant,
+                InitializedConstant | UsedConstant => *state = ReassignedConstant,
+                ReassignedConstant => (),
+            }
+
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn use_in_scope(scope: &mut HashMap<Sym, VariableState>, name: &Sym) -> Option<()> {
+        if let Some(state) = scope.get_mut(name) {
+            use VariableState::*;
+            match state {
+                DeclaredConstant | Declared | Initialized | Used => *state = Used,
+                InitializedConstant | UsedConstant => *state = UsedConstant,
+                ReassignedConstant | AssignedBeforeUse => (),
+            }
+
+            Some(())
+        } else {
+            None
         }
     }
 
@@ -336,16 +433,18 @@ impl Resolver {
             };
 
             if let Some(scope) = scope {
-                if !scope.contains_key(name) {
+                if Self::init_in_scope(scope, name).is_none() {
                     self.errors.push(format!(
                         "ICE No variable named {} in this scope.",
                         sym_to_str(name)
                     ));
                 }
-                scope.insert(*name, VariableState::Initialized);
             }
-        } else {
-            // todo: Globals?
+        } else if Self::init_in_scope(&mut self.global_scope, name).is_none() {
+            self.errors.push(format!(
+                "ICE No variable named {} in global scope.",
+                sym_to_str(name)
+            ));
         }
     }
 
@@ -363,13 +462,7 @@ impl Resolver {
             };
 
             if let Some(scope) = scope {
-                if let Some(var) = scope.get_mut(name) {
-                    match var {
-                        VariableState::Declared => *var = VariableState::Used,
-                        VariableState::Initialized => *var = VariableState::AssignedBeforeUse,
-                        VariableState::Used | VariableState::AssignedBeforeUse => (),
-                    }
-                } else {
+                if Self::assign_in_scope(scope, name).is_none() {
                     self.errors.push(format!(
                         "ICE No variable named {} in this scope.",
                         sym_to_str(name)
@@ -377,7 +470,7 @@ impl Resolver {
                 }
             }
         } else {
-            // todo: Globals?
+            let _ = Self::assign_in_scope(&mut self.global_scope, name);
         }
     }
 
@@ -395,16 +488,15 @@ impl Resolver {
             };
 
             if let Some(scope) = scope {
-                if !scope.contains_key(name) {
+                if Self::use_in_scope(scope, name).is_none() {
                     self.errors.push(format!(
                         "ICE No variable named {} in this scope.",
                         sym_to_str(name)
                     ));
                 }
-                scope.insert(*name, VariableState::Used);
             }
         } else {
-            // todo: Globals?
+            let _ = Self::use_in_scope(&mut self.global_scope, name);
         }
     }
 

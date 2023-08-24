@@ -14,13 +14,15 @@
 
 # Differences compared to standard Lox #
 
+Several new keywords are included. These keywords are disabled in compatibility mode, to allow for maximum compatibility. These are the added keywords: `break`, `const`, `global`, `in`, `local`, `mut`, and `switch`.
+
 A file can return from the top level. A call to `require` returns whatever the file returned.
 
 Warnings for unused variables, except if the variable starts with `_`. Also warning for initializing a variable and then immediately overwriting it.
 
 Hexadecimal integers as in `0xf3`
 
-All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode variable, function, and class declarations in the top-level scope of a file default to being global. For the rare use case that you require compatibility mode, you can use the `local` decorator to declare something as local in the top-level scope. The local decorator is always allowed but has no effect in other contexts.
+All variable declarations are local by default, but can be annotated with the `global` decorator as in `global var x` to make them global. This can be applied to class and function declarations, too, which also default to being local. In compatibility mode, variable, function, and class declarations in the top-level scope of a file default to being global.
 
 `if` and `while` statements are able to be more Rust-like; you either have to use brackets around the body, even if it's just one expression, *or* use parenthesis around the condition.
 

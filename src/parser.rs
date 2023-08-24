@@ -81,6 +81,28 @@ impl ParseError {
     }
 }
 
+#[derive(Default, Clone, Copy)]
+struct Decorators {
+    global: bool,
+    constant: bool,
+}
+
+impl Decorators {
+    fn with_global(self) -> Self {
+        Decorators {
+            global: true,
+            ..self
+        }
+    }
+
+    fn with_const(self) -> Self {
+        Decorators {
+            constant: true,
+            ..self
+        }
+    }
+}
+
 pub struct Parser {
     scanner: Scanner,
     previous: Option<Token>,
@@ -138,7 +160,7 @@ impl Parser {
             return None;
         }
 
-        match self.decorated_declaration() {
+        match self.initial() {
             Ok(stmt) => Some(Ok(stmt)),
             Err(err) => {
                 self.report(err);
@@ -309,20 +331,33 @@ impl Parser {
     }
 }
 
-/// ### Recursive Descent
-/// Most of the following functions each represent one rule of the language's grammar
+/**
+### Recursive Descent
+Most of the following functions each represent one rule of the language's grammar.
+The rest are helper functions that directly assist with that.
+**/
 impl Parser {
-    fn decorated_declaration(&mut self) -> Result<Stmt, ParseError> {
+    fn initial(&mut self) -> Result<Stmt, ParseError> {
+        self.decorated_declaration(None)
+    }
+
+    fn decorated_declaration(&mut self, prev_deco: Option<Decorators>) -> Result<Stmt, ParseError> {
+        let deco = if let Some(deco) = prev_deco {
+            deco
+        } else {
+            Decorators::default()
+        };
+
         if let Some(token) = self.check_advance(&[
             TokenKind::Reserved(ReservedWord::Global),
-            TokenKind::Reserved(ReservedWord::Local),
+            TokenKind::Reserved(ReservedWord::Const),
         ]) {
             match &token.kind {
                 TokenKind::Reserved(word) => {
                     use ReservedWord::*;
                     match word {
-                        Global => self.declaration(true),
-                        Local => self.declaration(false),
+                        Global => self.decorated_declaration(Some(deco.with_global())),
+                        Const => self.decorated_declaration(Some(deco.with_const())),
                         _ => unreachable!(),
                     }
                 }
@@ -335,13 +370,32 @@ impl Parser {
         ]) {
             // here is where we implement backwards compatibility with Lox
             // in compatibility mode, it should declare a global when in the "global" scope
-            self.declaration(self.compatibility && (self.scope_depth == 0))
+            let deco = if !deco.global {
+                Decorators {
+                    global: self.compatibility && (self.scope_depth == 0),
+                    ..deco
+                }
+            } else {
+                deco
+            };
+            self.declaration(deco)
         } else {
-            self.statement()
+            if prev_deco.is_some() {
+                return Err(self.error(ParseErrorKind::ExpectedToken(
+                    vec![
+                        TokenKind::Reserved(ReservedWord::Class),
+                        TokenKind::Reserved(ReservedWord::Fun),
+                        TokenKind::Reserved(ReservedWord::Var),
+                    ],
+                    self.peek().cloned(),
+                )));
+            } else {
+                self.statement()
+            }
         }
     }
 
-    fn declaration(&mut self, global: bool) -> Result<Stmt, ParseError> {
+    fn declaration(&mut self, deco: Decorators) -> Result<Stmt, ParseError> {
         if let Some(token) = self.check_advance(&[
             TokenKind::Reserved(ReservedWord::Class),
             TokenKind::Reserved(ReservedWord::Fun),
@@ -351,9 +405,9 @@ impl Parser {
                 TokenKind::Reserved(word) => {
                     use ReservedWord::*;
                     match word {
-                        Class => self.class_declaration(global),
-                        Fun => self.function_declaration(global),
-                        Var => self.variable_declaration(global),
+                        Class => self.class_declaration(deco),
+                        Fun => self.function_declaration(deco),
+                        Var => self.variable_declaration(deco),
                         _ => unreachable!(),
                     }
                 }
@@ -371,7 +425,7 @@ impl Parser {
         }
     }
 
-    fn class_declaration(&mut self, global: bool) -> Result<Stmt, ParseError> {
+    fn class_declaration(&mut self, deco: Decorators) -> Result<Stmt, ParseError> {
         let name = self.consume_identifier()?;
 
         let superclass = if self.advance_if_match(TokenKind::Op(Operator::Less)) {
@@ -389,16 +443,17 @@ impl Parser {
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
             if self.advance_if_match(TokenKind::Reserved(ReservedWord::Class)) {
-                associated_funcs.push(self.function_declaration(false)?);
+                associated_funcs.push(self.function_declaration(Decorators::default())?);
             } else {
-                methods.push(self.function_declaration(false)?);
+                methods.push(self.function_declaration(Decorators::default())?);
             }
         }
 
         self.consume_expected(&[TokenKind::RightBrace])?;
 
         Ok(Stmt::new(StmtKind::ClassDeclaration {
-            global,
+            global: deco.global,
+            constant: deco.constant,
             name,
             superclass,
             methods,
@@ -406,11 +461,12 @@ impl Parser {
         }))
     }
 
-    fn function_declaration(&mut self, global: bool) -> Result<Stmt, ParseError> {
+    fn function_declaration(&mut self, deco: Decorators) -> Result<Stmt, ParseError> {
         let name = self.consume_identifier()?;
 
         Ok(Stmt::new(StmtKind::FunctionDeclaration {
-            global,
+            global: deco.global,
+            constant: deco.constant,
             name,
             func: self.function()?,
         }))
@@ -448,7 +504,7 @@ impl Parser {
         })
     }
 
-    fn variable_declaration(&mut self, global: bool) -> Result<Stmt, ParseError> {
+    fn variable_declaration(&mut self, deco: Decorators) -> Result<Stmt, ParseError> {
         let sym = self
             .peek()
             .and_then(|t| match &t.kind {
@@ -468,7 +524,8 @@ impl Parser {
         self.consume_expected(&[TokenKind::Op(Operator::Semicolon)])?;
 
         Ok(Stmt::new(StmtKind::VariableDeclaration {
-            global,
+            global: deco.global,
+            constant: deco.constant,
             name: sym,
             initializer,
         }))
@@ -529,7 +586,7 @@ impl Parser {
         let initializer = if self.advance_if_match(TokenKind::Op(Operator::Semicolon)) {
             None
         } else if self.advance_if_match(TokenKind::Reserved(ReservedWord::Var)) {
-            Some(self.variable_declaration(false)?)
+            Some(self.variable_declaration(Decorators::default())?)
         } else {
             Some(self.expression_statement()?)
         };
@@ -600,6 +657,7 @@ impl Parser {
 
         let iter_declaration = Stmt::new(StmtKind::VariableDeclaration {
             global: false,
+            constant: false,
             name: iter_name,
             initializer: Some(iter_expr),
         });
@@ -611,6 +669,7 @@ impl Parser {
 
         let counter_declaration = Stmt::new(StmtKind::VariableDeclaration {
             global: false,
+            constant: false,
             name: counter_name,
             initializer: Some(literal_true),
         });
@@ -727,6 +786,7 @@ impl Parser {
 
         let subject_declaration = Stmt::new(StmtKind::VariableDeclaration {
             global: false,
+            constant: false,
             name: subject_name,
             initializer: Some(subject),
         });
@@ -861,7 +921,7 @@ impl Parser {
         self.scope_depth += 1;
 
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
-            stmts.push(self.decorated_declaration()?);
+            stmts.push(self.decorated_declaration(None)?);
         }
 
         self.scope_depth -= 1;
@@ -879,7 +939,7 @@ impl Parser {
         while !self.check(&[TokenKind::RightBrace]) && !self.is_at_end() {
             // we don't do a separate statement block for `if` etc because it enables some useful idioms
             //~ stmts.push(self.statement()?);
-            stmts.push(self.decorated_declaration()?);
+            stmts.push(self.decorated_declaration(None)?);
         }
 
         self.scope_depth -= 1;
