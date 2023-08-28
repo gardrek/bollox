@@ -184,23 +184,6 @@ impl Object {
         })
     }
 
-    // TODO: this will be the version of the function if and when we switch the parser to
-    // using the scanner directly instead of a vec<Token>
-    pub fn _from_owned_token(token: Token) -> Option<Object> {
-        use Object::*;
-        Some(match &token.kind {
-            TokenKind::Number(value) => Number(*value),
-            TokenKind::StaticString(sym) => String(StringKind::Static(*sym)),
-            TokenKind::Reserved(word) => match word {
-                ReservedWord::True => Boolean(true),
-                ReservedWord::False => Boolean(false),
-                ReservedWord::Nil => Nil,
-                _ => return None,
-            },
-            _ => return None,
-        })
-    }
-
     pub fn is_truthy(&self) -> bool {
         use Object::*;
         match self {
@@ -209,24 +192,6 @@ impl Object {
             _ => true,
         }
     }
-
-    /*
-    pub fn as_number(&self) -> Option<f64> {
-        use Object::*;
-        Some(match self {
-            Number(n) => *n,
-            _ => return None,
-        })
-    }
-
-    pub fn unwrap_as_string(&self) -> String {
-        if let Object::String(kind) = self {
-            kind.to_string()
-        } else {
-            panic!("unwrap_as_string called on non-string object")
-        }
-    }
-    */
 }
 
 impl PartialEq for LoxFunction {

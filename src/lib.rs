@@ -33,9 +33,6 @@ extern crate string_interner;
 lazy_static! {
     pub static ref INTERNER: RwLock<DefaultStringInterner> =
         RwLock::new(DefaultStringInterner::new());
-    //~ pub static ref SOURCE: RwLock<String> = RwLock::new(String::new());
-    /* pub static ref SOURCE: RwLock<HashMap<PathBuf, String>> =
-        RwLock::new(HashMap::new()); */
 }
 
 pub fn run_string(
@@ -50,11 +47,10 @@ pub fn run_string(
 
     let mut statements = parser.parse_all()?;
 
-    let had_error = !parser.errors.is_empty();
+    let had_error = !parser.errors().is_empty();
 
     if had_error {
-        //~ if true {
-        for e in parser.errors.iter() {
+        for e in parser.errors().iter() {
             eprintln!(
                 "error on line {:?}: {} `{}`",
                 crate::source::SourceLocation::error_line_number(
@@ -69,14 +65,13 @@ pub fn run_string(
         /*
         eprintln!();
         for s in &statements {
-            //~ eprint!("{} ", s);
             eprintln!("{}", s);
         }
         eprintln!();
         //~ */
-        //~ return Ok(None);
+
         return Err(result::Error::ManyErrors(
-            parser.errors.into_iter().map(|e| e.into()).collect(),
+            parser.errors().iter().map(|e| e.clone().into()).collect(),
         ));
     }
 

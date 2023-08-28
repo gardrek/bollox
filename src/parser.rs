@@ -107,7 +107,7 @@ pub struct Parser {
     scanner: Scanner,
     previous: Option<Token>,
     current: Option<Token>,
-    pub errors: Vec<ParseError>,
+    errors: Vec<ParseError>,
     at_end: bool,
     compatibility: bool,
     scope_depth: usize,
@@ -143,6 +143,14 @@ impl Parser {
             }
         }
         Ok(statements)
+    }
+
+    pub fn errors(&self) -> &Vec<ParseError> {
+        &self.errors
+    }
+
+    pub fn clear_errors(&mut self) {
+        self.errors.clear();
     }
 
     fn init(&mut self) {
@@ -379,19 +387,17 @@ impl Parser {
                 deco
             };
             self.declaration(deco)
+        } else if prev_deco.is_some() {
+            return Err(self.error(ParseErrorKind::ExpectedToken(
+                vec![
+                    TokenKind::Reserved(ReservedWord::Class),
+                    TokenKind::Reserved(ReservedWord::Fun),
+                    TokenKind::Reserved(ReservedWord::Var),
+                ],
+                self.peek().cloned(),
+            )));
         } else {
-            if prev_deco.is_some() {
-                return Err(self.error(ParseErrorKind::ExpectedToken(
-                    vec![
-                        TokenKind::Reserved(ReservedWord::Class),
-                        TokenKind::Reserved(ReservedWord::Fun),
-                        TokenKind::Reserved(ReservedWord::Var),
-                    ],
-                    self.peek().cloned(),
-                )));
-            } else {
-                self.statement()
-            }
+            self.statement()
         }
     }
 

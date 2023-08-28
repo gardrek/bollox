@@ -14,6 +14,15 @@
 
 # Differences compared to standard Lox #
 
+Strings support many of the same escape sequences as Rust:
+- `\n` - new line
+- `\r` - carriage return
+- `\t` - tab
+- `\"` - literal double quote
+- `\'` - literal single quote
+- `\\` - literal backslash
+- `\0` - nul character
+
 Several new keywords are included. These keywords are disabled in compatibility mode, to allow for maximum compatibility. These are the added keywords: `break`, `const`, `global`, `in`, `local`, `mut`, and `switch`.
 
 A file can return from the top level. A call to `require` returns whatever the file returned.

@@ -21,7 +21,7 @@ pub struct Environment {
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
-    pub native_methods: HashMap<Sym, NativeClass>,
+    pub native_classes: HashMap<Sym, NativeClass>,
 }
 
 #[derive(Default)]
@@ -65,28 +65,6 @@ impl Environment {
         self.bindings.insert(*sym, obj)
     }
 
-    /*
-        fn assign(&mut self, sym: Sym, obj: Object) -> Option<Object> {
-            if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(sym) {
-                Some(e.insert(obj))
-            } else if let Some(enc) = &mut self.enclosing {
-                enc.borrow_mut().assign(sym, obj)
-            } else {
-                None
-            }
-        }
-
-        fn is_defined(&self, sym: &Sym) -> bool {
-            if self.bindings.contains_key(sym) {
-                true
-            } else if let Some(enc) = &self.enclosing {
-                enc.borrow().is_defined(sym)
-            } else {
-                false
-            }
-        }
-    */
-
     fn get_by_sym(&self, sym: &Sym) -> Option<Object> {
         let obj = self.bindings.get(sym);
 
@@ -118,22 +96,6 @@ impl Environment {
             None
         }
     }
-
-    /*
-        fn assign_at_depth(&mut self, sym: &Sym, obj: Object, depth: usize) -> Option<Object> {
-            if depth == 0 {
-                if let std::collections::hash_map::Entry::Occupied(mut e) = self.bindings.entry(*sym) {
-                    Some(e.insert(obj))
-                } else {
-                    None
-                }
-            } else if let Some(enc) = &mut self.enclosing {
-                enc.borrow_mut().assign_at_depth(sym, obj, depth - 1)
-            } else {
-                None
-            }
-        }
-    */
 
     pub fn flat_copy(&self) -> Rc<RefCell<Environment>> {
         let bindings = self.bindings_flattened();
@@ -199,9 +161,9 @@ impl Interpreter {
             ..Interpreter::default()
         };
 
-        crate::stdlib::init_number_native_methods(&mut interpreter);
-        crate::stdlib::init_string_native_methods(&mut interpreter);
-        crate::stdlib::init_array_native_methods(&mut interpreter);
+        crate::stdlib::init_number_native_class(&mut interpreter);
+        crate::stdlib::init_string_native_class(&mut interpreter);
+        crate::stdlib::init_array_native_class(&mut interpreter);
 
         interpreter
     }
@@ -449,7 +411,6 @@ impl Interpreter {
     pub fn interpret_slice(&mut self, statements: &[Stmt]) -> Result<Object, ControlFlow> {
         let mut obj = None;
         for statement in statements {
-            //~ eprintln!("{}", statement);
             obj = Some(self.interpret_statement(statement)?);
         }
 
@@ -508,7 +469,7 @@ impl Interpreter {
                         Err(eor) => match eor {
                             ControlFlow::RuntimeError(e) => return Err(e.into()),
                             ControlFlow::Return(v) => v,
-                            ControlFlow::Break(_v) => todo!(),
+                            ControlFlow::Break(_v) => Err(RuntimeError::ice("break outside loop", location))?,
                         },
                     })
                 }
@@ -536,7 +497,7 @@ impl Interpreter {
                     Err(eor) => match eor {
                         ControlFlow::RuntimeError(e) => return Err(e.into()),
                         ControlFlow::Return(v) => v,
-                        ControlFlow::Break(_v) => todo!(),
+                        ControlFlow::Break(_v) => Err(RuntimeError::ice("break outside loop", location))?,
                     },
                 })
             }
@@ -580,7 +541,7 @@ impl Interpreter {
             interner.get_or_intern(class_name_str)
         };
 
-        if let Some(methods) = self.native_methods.get(&class_name) {
+        if let Some(methods) = self.native_classes.get(&class_name) {
             if let Some(method) = methods.methods.get(method_name) {
                 let mut method = method.clone();
 

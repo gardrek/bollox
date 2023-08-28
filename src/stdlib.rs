@@ -231,17 +231,17 @@ pub fn init_global_environment(env: &mut Environment) {
     */
 }
 
-pub fn init_number_native_methods(interpreter: &mut Interpreter) {
+pub fn init_number_native_class(interpreter: &mut Interpreter) {
     let class_name = {
         let mut interner = INTERNER.write().unwrap();
         interner.get_or_intern("Number")
     };
 
-    let mut native_methods = NativeClass::default();
+    let mut native_class = NativeClass::default();
 
     // number.round()
 
-    native_methods.add_method(
+    native_class.add_method(
         "round",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -274,7 +274,7 @@ pub fn init_number_native_methods(interpreter: &mut Interpreter) {
 
     // number.to_number()
 
-    native_methods.add_method(
+    native_class.add_method(
         "to_number",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -310,21 +310,21 @@ pub fn init_number_native_methods(interpreter: &mut Interpreter) {
     //
 
     interpreter
-        .native_methods
-        .insert(class_name, native_methods);
+        .native_classes
+        .insert(class_name, native_class);
 }
 
-pub fn init_string_native_methods(interpreter: &mut Interpreter) {
+pub fn init_string_native_class(interpreter: &mut Interpreter) {
     let class_name = {
         let mut interner = INTERNER.write().unwrap();
         interner.get_or_intern("String")
     };
 
-    let mut native_methods = NativeClass::default();
+    let mut native_class = NativeClass::default();
 
     // string.len()
 
-    native_methods.add_method(
+    native_class.add_method(
         "len",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -357,7 +357,7 @@ pub fn init_string_native_methods(interpreter: &mut Interpreter) {
 
     // string.to_number()
 
-    native_methods.add_method(
+    native_class.add_method(
         "to_number",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -396,21 +396,21 @@ pub fn init_string_native_methods(interpreter: &mut Interpreter) {
     //
 
     interpreter
-        .native_methods
-        .insert(class_name, native_methods);
+        .native_classes
+        .insert(class_name, native_class);
 }
 
-pub fn init_array_native_methods(interpreter: &mut Interpreter) {
+pub fn init_array_native_class(interpreter: &mut Interpreter) {
     let class_name = {
         let mut interner = INTERNER.write().unwrap();
         interner.get_or_intern("Array")
     };
 
-    let mut native_methods = NativeClass::default();
+    let mut native_class = NativeClass::default();
 
     // Array.len()
 
-    native_methods.add_method(
+    native_class.add_method(
         "len",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -443,7 +443,7 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
 
     // Array.push(obj)
 
-    native_methods.add_method(
+    native_class.add_method(
         "push",
         1,
         |interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -481,7 +481,7 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
 
     // Array.pop()
 
-    native_methods.add_method(
+    native_class.add_method(
         "pop",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -517,7 +517,7 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
 
     // Array.clone()
 
-    native_methods.add_method(
+    native_class.add_method(
         "clone",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -550,7 +550,7 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
 
     // Array.bytes_to_str()
 
-    native_methods.add_method(
+    native_class.add_method(
         "bytes_to_str",
         0,
         |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
@@ -604,6 +604,6 @@ pub fn init_array_native_methods(interpreter: &mut Interpreter) {
     //
 
     interpreter
-        .native_methods
-        .insert(class_name, native_methods);
+        .native_classes
+        .insert(class_name, native_class);
 }

@@ -16,6 +16,7 @@ pub struct Resolver {
     pub warnings: Vec<String>,
     function_kind: Option<FunctionKind>,
     class_kind: Option<ClassKind>,
+    loop_depth: usize,
 }
 
 #[derive(Clone)]
@@ -44,10 +45,22 @@ enum VariableState {
 
 impl Resolver {
     pub fn resolve_all(&mut self, list: &mut [Stmt]) {
+        self.resolve_start();
+        self.resolve_list(list);
+        self.resolve_end();
+    }
+
+    pub fn resolve_start(&mut self) {
         self.begin_scope();
+    }
+
+    pub fn resolve_list(&mut self, list: &mut [Stmt]) {
         for s in list {
             self.resolve_statement(s);
         }
+    }
+
+    pub fn resolve_end(&mut self) {
         self.end_scope();
         let scope = &std::mem::take(&mut self.global_scope);
         self.evaluate_scope(scope);
@@ -64,6 +77,9 @@ impl Resolver {
                 self.end_scope();
             }
             Break(expr) => {
+                if self.loop_depth == 0 {
+                    self.errors.push("Break outside loop".to_string());
+                }
                 if let Some(e) = expr {
                     self.resolve_expression(e);
                 }
@@ -76,6 +92,10 @@ impl Resolver {
                 methods,
                 associated_funcs,
             } => {
+                let old_loop_depth = self.loop_depth;
+
+                self.loop_depth = 0;
+
                 let prev_kind = self.class_kind.take();
                 self.class_kind = Some(ClassKind::Class);
 
@@ -129,6 +149,8 @@ impl Resolver {
                 }
 
                 self.class_kind = prev_kind;
+
+                self.loop_depth = old_loop_depth;
             }
             Expr(expr) => self.resolve_expression(expr),
             FunctionDeclaration {
@@ -137,6 +159,10 @@ impl Resolver {
                 name,
                 func,
             } => {
+                let old_loop_depth = self.loop_depth;
+
+                self.loop_depth = 0;
+
                 if *global {
                     self.declare_global(name, *constant);
                     self.init_variable(name, None);
@@ -145,6 +171,8 @@ impl Resolver {
                     self.init_variable(name, Some(0));
                 }
                 self.resolve_function(func, FunctionKind::Function);
+
+                self.loop_depth = old_loop_depth;
             }
             If(cond, body, else_body) => {
                 self.resolve_expression(cond);
@@ -177,8 +205,10 @@ impl Resolver {
                 }
             }
             While(cond, body) => {
+                self.loop_depth += 1;
                 self.resolve_expression(cond);
                 self.resolve_statement(body);
+                self.loop_depth -= 1;
             }
         }
     }
@@ -188,7 +218,13 @@ impl Resolver {
         match &mut expr.kind {
             Literal(obj) => {
                 if let Object::LoxFunc(func) = obj {
+                    let old_loop_depth = self.loop_depth;
+
+                    self.loop_depth = 0;
+
                     self.resolve_function(func, FunctionKind::Function);
+
+                    self.loop_depth = old_loop_depth;
                 }
             }
             Unary(_op, a) => self.resolve_expression(a),

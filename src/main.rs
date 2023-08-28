@@ -37,6 +37,10 @@ fn run() -> GenericResult {
             );
             let mut interpreter = Interpreter::new_with_stdlib();
 
+            let mut resolver = bollox::resolver::Resolver::default();
+
+            resolver.resolve_start();
+
             loop {
                 write!(stdout, "> ")?;
                 stdout.flush()?;
@@ -47,11 +51,9 @@ fn run() -> GenericResult {
                 // TODO: handle errors instead of crashing
                 let mut statements = parser.parse_all()?;
 
-                let mut resolver = bollox::resolver::Resolver::default();
+                resolver.resolve_list(&mut statements[..]);
 
-                resolver.resolve_all(&mut statements[..]);
-
-                if parser.errors.is_empty() {
+                if resolver.errors.is_empty() && parser.errors().is_empty() {
                     match interpreter.interpret_slice(&statements[..]) {
                         Ok(_o) => (), //writeln!(stdout, "=> {}", o)?,
                         Err(eor) => match eor {
@@ -62,9 +64,15 @@ fn run() -> GenericResult {
                     }
                 }
 
-                while let Some(e) = parser.errors.pop() {
+                while let Some(e) = resolver.errors.pop() {
                     eprintln!("{}", e);
                 }
+
+                for e in parser.errors().iter() {
+                    eprintln!("{}", e);
+                }
+
+                parser.clear_errors();
 
                 stdout.flush()?;
             }

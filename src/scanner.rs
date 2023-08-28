@@ -11,8 +11,6 @@ fn is_identifier_continue(c: char) -> bool {
     c.is_digit(36) || c == '_'
 }
 
-//use std::path::PathBuf;
-
 pub struct Scanner {
     // this is how we get the source file
     source: Source,
@@ -269,7 +267,6 @@ impl Scanner {
         }
     }
 
-    /* TODO: add escape sequence(s) at least for double quote */
     fn string(&mut self) -> Token {
         let offset = self.cursor - 1;
         let mut length = 0;
@@ -279,7 +276,19 @@ impl Scanner {
             if let Some(c) = c {
                 self.advance_char();
                 length += c.len_utf8();
-                if c == '"' {
+                if c == '\\' {
+                    if let Some(c) = self.peek_char() {
+                        self.advance_char(); // jump forward one to skip the quote check
+                        length += c.len_utf8();
+                    } else {
+                        let location = SourceLocation::from_range(offset..(offset + length));
+                        let token = Token {
+                            location,
+                            kind: TokenKind::UnfinishedString,
+                        };
+                        return token;
+                    }
+                } else if c == '"' {
                     length += 1;
                     break;
                 }
@@ -298,8 +307,18 @@ impl Scanner {
         /*  Even though we're not multi-threaded yet,
             there's no reason to keep the lock longer than necessary
         */
+        let raw = &self.source.get_slice(&location)[1..length - 1];
+
+        // TODO: actually handle errors here, possibly introduce a new errors holder, or throw this down the line to the parser
+        let s = match Scanner::parse_string(raw) {
+            Ok(s) => s,
+            Err(_e) => {
+                self.had_error = true;
+                "".to_string()
+            }
+        };
+
         let sym = {
-            let s = &self.source.get_slice(&location)[1..length - 1];
             let mut interner = INTERNER.write().unwrap();
             interner.get_or_intern(s)
         };
@@ -308,6 +327,34 @@ impl Scanner {
             location,
             kind: TokenKind::StaticString(sym),
         }
+    }
+
+    fn parse_string(escaped_string: &str) -> Result<String, &'static str> {
+        let mut final_string = String::with_capacity(escaped_string.len());
+        let mut iter = escaped_string.chars();
+
+        while let Some(ch) = iter.next() {
+            final_string.push(match ch {
+                '\\' => match iter.next() {
+                    Some(esc) => match esc {
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        '\\' => '\\',
+                        '0' => '\0',
+                        '\'' => '\'',
+                        '\"' => '\"',
+                        'x' => return Err("unimplemented string escape `\\x`"),
+                        'u' => return Err("unimplemented string escape `\\u`"),
+                        _ => return Err("unrecognized string escape"),
+                    },
+                    None => return Err("unexpected end of string"),
+                },
+                _ => ch,
+            });
+        }
+
+        Ok(final_string)
     }
 
     fn identifier(&mut self) -> Token {
@@ -361,27 +408,13 @@ impl Scanner {
     fn do_eof(&mut self) -> Option<Token> {
         self.eof = true;
         None
-        /*
-        let offset = self.cursor;
-        Some(Token {
-            location: SourceLocation::from_range(offset..offset),
-            kind: TokenKind::Eof,
-        })
-        // */
     }
 
     fn scan_token(&mut self) -> Result<Option<Token>, result::Error> {
-        // TODO:  a big one; need to implement rewinding or some other solution to allow parsing
-        // a token that is across multiple lines in interactive mode. need some way to signal EOF
-
-        if self.eof {
-            return Ok(None);
-        }
-
         let total_length = self.source.len();
 
         // If we are past the end or already hit eof
-        if self.cursor >= total_length {
+        if self.eof || self.cursor >= total_length {
             return Ok(self.do_eof());
         }
 
@@ -437,7 +470,7 @@ impl Scanner {
                     continue;
                 }
                 ch if ch.is_ascii_digit() => {
-                    self.cursor -= ch.len_utf8(); // TODO: maybe should do this another way?
+                    self.cursor -= ch.len_utf8();
                     break self.number();
                 }
                 ch if is_identifier_start(ch) => {
