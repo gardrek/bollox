@@ -153,36 +153,28 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "require",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
             let filename_obj = &args[0];
 
             match filename_obj {
                 Object::String(s) => {
                     let filename = std::path::PathBuf::from(s.to_string());
 
-                    // does it make sense to run an include in compatibility mode?
-                    // old scripts aren't even going to return anything, and global scope isn't shared (yet?)
-                    /*
-                    let compatibility = match filename.extension().map(|f| f.to_str()) {
-                        Some(Some("lox")) => true,
-                        _ => false,
-                    };
-                    //~ */
-
                     let compatibility = false;
 
                     let source = std::fs::read_to_string(filename).unwrap();
 
-                    let result = crate::run_string(source.clone(), 0, compatibility);
-
-                    match result {
+                    match crate::interpret(&source, 0, compatibility, interpreter) {
                         Ok(obj) => Ok(obj.unwrap_or(Object::Nil)),
                         Err(e) => {
                             eprintln!(
-                                "error on line {:?}",
+                                "[require] error on line {:?}",
                                 crate::source::SourceLocation::error_line_number(&e, &source)
                             );
-                            panic!()
+
+                            // TODO: Return an error here instead?
+                            //~ Ok(Object::Nil)
+                            std::process::exit(1)
                         }
                     }
                 }

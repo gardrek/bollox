@@ -1,0 +1,2 @@
+global var GLOBAL = "Global";
+GLOBAL = GLOBAL;

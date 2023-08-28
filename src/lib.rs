@@ -35,13 +35,13 @@ lazy_static! {
         RwLock::new(DefaultStringInterner::new());
 }
 
-pub fn run_string(
-    source: String,
+fn parse_and_resolve(
+    source: &str,
     id: usize,
     compatibility_mode: bool,
-) -> Result<Option<object::Object>> {
+) -> Result<Vec<ast::Stmt>> {
     let mut parser = Parser::new(
-        Scanner::new(&source, SourceId(id), compatibility_mode),
+        Scanner::new(source, SourceId(id), compatibility_mode),
         compatibility_mode,
     );
 
@@ -55,10 +55,10 @@ pub fn run_string(
                 "error on line {:?}: {} `{}`",
                 crate::source::SourceLocation::error_line_number(
                     &result::Error::Parser(e.clone()),
-                    &source
+                    source
                 ),
                 e,
-                e.get_slice(&source),
+                e.get_slice(source),
             )
         }
 
@@ -96,13 +96,33 @@ pub fn run_string(
         ));
     }
 
+    Ok(statements)
+}
+
+pub fn run_string(
+    source: String,
+    id: usize,
+    compatibility_mode: bool,
+) -> Result<Option<object::Object>> {
     let mut interpreter = Interpreter::new_with_stdlib();
 
-    let obj = match interpreter.interpret_slice(&statements[..]) {
+    interpret(&source, id, compatibility_mode, &mut interpreter)
+}
+
+
+pub fn interpret(
+    source: &str,
+    id: usize,
+    compatibility_mode: bool,
+    interpreter: &mut Interpreter,
+) -> Result<Option<object::Object>> {
+    let statements = parse_and_resolve(&source, id, compatibility_mode)?;
+
+    let obj = match interpreter.interpret_slice(&statements) {
         Ok(obj) => obj,
         Err(eor) => match eor {
             ControlFlow::RuntimeError(e) => {
-                let src = source::Source::new(&source);
+                let src = source::Source::new(source);
                 eprintln!("error on line {:?}", src.get_line_number(&e.location),);
 
                 return Err(e.into());
