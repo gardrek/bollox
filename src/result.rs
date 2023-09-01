@@ -18,10 +18,6 @@ pub enum Error {
 }
 
 impl Error {
-    fn _report(&self, location: &SourceLocation) {
-        eprintln!("{} at {}", self, location)
-    }
-
     pub fn get_location(&self) -> Option<&SourceLocation> {
         Some(match self {
             Self::Parser(e) => &e.location,
@@ -40,7 +36,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
-            Io => write!(f, "IO Error"),
+            Error::Io => write!(f, "IO Error"),
             Unimplemented(s) => write!(f, "Unimplemented feature: {}", s),
             Runtime(s) => write!(f, "{}", s),
             ManyErrors(_) => write!(f, "Many Errors"),

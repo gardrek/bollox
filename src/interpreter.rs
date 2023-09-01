@@ -469,7 +469,9 @@ impl Interpreter {
                         Err(eor) => match eor {
                             ControlFlow::RuntimeError(e) => return Err(e.into()),
                             ControlFlow::Return(v) => v,
-                            ControlFlow::Break(_v) => Err(RuntimeError::ice("break outside loop", location))?,
+                            ControlFlow::Break(_v) => {
+                                Err(RuntimeError::ice("break outside loop", location))?
+                            }
                         },
                     })
                 }
@@ -497,7 +499,9 @@ impl Interpreter {
                     Err(eor) => match eor {
                         ControlFlow::RuntimeError(e) => return Err(e.into()),
                         ControlFlow::Return(v) => v,
-                        ControlFlow::Break(_v) => Err(RuntimeError::ice("break outside loop", location))?,
+                        ControlFlow::Break(_v) => {
+                            Err(RuntimeError::ice("break outside loop", location))?
+                        }
                     },
                 })
             }
@@ -570,8 +574,6 @@ impl Interpreter {
 
     fn evaluate(&mut self, expr: &Expr) -> Result<Object, ControlFlow> {
         use ExprKind::*;
-        use Object::*;
-        use Operator::*;
         Ok(match &expr.kind {
             Literal(literal) => match literal {
                 Object::LoxFunc(func) => {
@@ -588,9 +590,9 @@ impl Interpreter {
             Unary(operator, operand_expr) => {
                 let operand = self.evaluate(operand_expr)?;
                 match operator {
-                    Minus => {
+                    Operator::Minus => {
                         let inner = match operand {
-                            Number(n) => n,
+                            Object::Number(n) => n,
                             _ => {
                                 return Err(RuntimeError::type_error(
                                     "Attempt to arithmetically negate a non-number.",
@@ -601,7 +603,7 @@ impl Interpreter {
                         };
                         Object::Number(-inner)
                     }
-                    Bang => {
+                    Operator::Bang => {
                         let inner = operand.is_truthy();
                         Object::Boolean(!inner)
                     }
@@ -617,8 +619,9 @@ impl Interpreter {
             Binary(left_operand_expr, operator, right_operand_expr) => {
                 let left = self.evaluate(left_operand_expr)?;
                 let right = self.evaluate(right_operand_expr)?;
+                use Object::*;
                 match operator {
-                    Minus => match (left, right) {
+                    Operator::Minus => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Number(left_n - right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -635,7 +638,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Plus => match (left, right) {
+                    Operator::Plus => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Number(left_n + right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -660,7 +663,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Slash => match (left, right) {
+                    Operator::Slash => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Number(left_n / right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -677,7 +680,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Star => match (left, right) {
+                    Operator::Star => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Number(left_n * right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -694,7 +697,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Percent => match (left, right) {
+                    Operator::Percent => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Number(left_n % right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -711,7 +714,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Greater => match (left, right) {
+                    Operator::Greater => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n > right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -728,7 +731,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    Less => match (left, right) {
+                    Operator::Less => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n < right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -745,7 +748,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    GreaterEqual => match (left, right) {
+                    Operator::GreaterEqual => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n >= right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -762,7 +765,7 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    LessEqual => match (left, right) {
+                    Operator::LessEqual => match (left, right) {
                         (Number(left_n), Number(right_n)) => Object::Boolean(left_n <= right_n),
                         (Number(_), _) => {
                             return Err(RuntimeError::type_error(
@@ -779,10 +782,9 @@ impl Interpreter {
                             .into());
                         }
                     },
-                    BangEqual => Object::Boolean(left != right),
-                    EqualEqual => Object::Boolean(left == right),
-                    Comma | Dot | Equal | Semicolon | Bang | MinusEqual | PlusEqual
-                    | SlashEqual | StarEqual | PercentEqual => {
+                    Operator::BangEqual => Object::Boolean(left != right),
+                    Operator::EqualEqual => Object::Boolean(left == right),
+                    _ => {
                         return Err(RuntimeError::ice(
                             "op is not a binary operator. bad syntax tree",
                             expr.location.clone(),
@@ -873,6 +875,7 @@ impl Interpreter {
 
                 let obj = self.evaluate(obj_expr)?;
 
+                use Object::*;
                 match obj {
                     Instance(instance) => match instance.borrow().get(name) {
                         Some(o) => o,
@@ -932,7 +935,7 @@ impl Interpreter {
                 let obj = self.evaluate(obj)?;
 
                 match obj {
-                    Instance(instance) => {
+                    Object::Instance(instance) => {
                         let value = self.evaluate(value)?;
 
                         instance.borrow_mut().set(name, value.clone());
@@ -948,7 +951,7 @@ impl Interpreter {
                     }
                 }
             }
-            This => {
+            ExprKind::This => {
                 let mut interner = INTERNER.write().unwrap();
                 let sym = interner.get_or_intern("this");
 

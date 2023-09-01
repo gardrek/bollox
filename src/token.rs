@@ -175,124 +175,125 @@ impl TokenKind {
 
 impl ReservedWord {
     pub fn is_modal(&self) -> bool {
-        use ReservedWord::*;
+        use ReservedWord as Rw;
         !matches!(
             self,
-            And | Class
-                | Else
-                | False
-                | Fun
-                | For
-                | If
-                | Nil
-                | Or
-                | Print
-                | Return
-                | Super
-                | This
-                | True
-                | Var
-                | While
+            Rw::And
+                | Rw::Class
+                | Rw::Else
+                | Rw::False
+                | Rw::Fun
+                | Rw::For
+                | Rw::If
+                | Rw::Nil
+                | Rw::Or
+                | Rw::Print
+                | Rw::Return
+                | Rw::Super
+                | Rw::This
+                | Rw::True
+                | Rw::Var
+                | Rw::While
         )
     }
 }
 pub fn reserved_word_as_string(s: &ReservedWord) -> &'static str {
-    use ReservedWord::*;
+    use ReservedWord as Rw;
     match s {
-        And => "and",
-        Break => "break",
-        Class => "class",
-        Const => "const",
-        Else => "else",
-        False => "false",
-        Fun => "fun",
-        For => "for",
-        Global => "global",
-        If => "if",
-        In => "in",
-        Local => "local",
-        Mut => "mut",
-        Nil => "nil",
-        Or => "or",
-        Print => "print",
-        Return => "return",
-        Super => "super",
-        Switch => "switch",
-        This => "this",
-        True => "true",
-        Var => "var",
-        While => "while",
+        Rw::And => "and",
+        Rw::Break => "break",
+        Rw::Class => "class",
+        Rw::Const => "const",
+        Rw::Else => "else",
+        Rw::False => "false",
+        Rw::Fun => "fun",
+        Rw::For => "for",
+        Rw::Global => "global",
+        Rw::If => "if",
+        Rw::In => "in",
+        Rw::Local => "local",
+        Rw::Mut => "mut",
+        Rw::Nil => "nil",
+        Rw::Or => "or",
+        Rw::Print => "print",
+        Rw::Return => "return",
+        Rw::Super => "super",
+        Rw::Switch => "switch",
+        Rw::This => "this",
+        Rw::True => "true",
+        Rw::Var => "var",
+        Rw::While => "while",
     }
 }
 
 pub fn string_as_reserved_word(s: &str) -> Option<ReservedWord> {
-    use ReservedWord::*;
+    use ReservedWord as Rw;
     Some(match s {
-        "and" => And,
-        "break" => Break,
-        "class" => Class,
-        "const" => Const,
-        "else" => Else,
-        "false" => False,
-        "fun" => Fun,
-        "for" => For,
-        "global" => Global,
-        "if" => If,
-        "in" => In,
-        "local" => Local,
-        "mut" => Mut,
-        "nil" => Nil,
-        "or" => Or,
-        "print" => Print,
-        "return" => Return,
-        "super" => Super,
-        "switch" => Switch,
-        "this" => This,
-        "true" => True,
-        "var" => Var,
-        "while" => While,
+        "and" => Rw::And,
+        "break" => Rw::Break,
+        "class" => Rw::Class,
+        "const" => Rw::Const,
+        "else" => Rw::Else,
+        "false" => Rw::False,
+        "fun" => Rw::Fun,
+        "for" => Rw::For,
+        "global" => Rw::Global,
+        "if" => Rw::If,
+        "in" => Rw::In,
+        "local" => Rw::Local,
+        "mut" => Rw::Mut,
+        "nil" => Rw::Nil,
+        "or" => Rw::Or,
+        "print" => Rw::Print,
+        "return" => Rw::Return,
+        "super" => Rw::Super,
+        "switch" => Rw::Switch,
+        "this" => Rw::This,
+        "true" => Rw::True,
+        "var" => Rw::Var,
+        "while" => Rw::While,
         _ => return None,
     })
 }
 
 pub fn operator_as_string(s: &Operator) -> &'static str {
-    use Operator::*;
+    use Operator as Op;
     match s {
-        Comma => ",",
-        Dot => ".",
-        Minus => "-",
-        Plus => "+",
-        Slash => "/",
-        Star => "*",
-        Percent => "%",
-        Bang => "!",
-        BangEqual => "!=",
-        Equal => "=",
-        EqualEqual => "==",
-        Greater => ">",
-        GreaterEqual => ">=",
-        Less => "<",
-        LessEqual => "<=",
-        Semicolon => ";",
-        MinusEqual => "-=",
-        PlusEqual => "+=",
-        SlashEqual => "/=",
-        StarEqual => "*=",
-        PercentEqual => "%=",
+        Op::Comma => ",",
+        Op::Dot => ".",
+        Op::Minus => "-",
+        Op::Plus => "+",
+        Op::Slash => "/",
+        Op::Star => "*",
+        Op::Percent => "%",
+        Op::Bang => "!",
+        Op::BangEqual => "!=",
+        Op::Equal => "=",
+        Op::EqualEqual => "==",
+        Op::Greater => ">",
+        Op::GreaterEqual => ">=",
+        Op::Less => "<",
+        Op::LessEqual => "<=",
+        Op::Semicolon => ";",
+        Op::MinusEqual => "-=",
+        Op::PlusEqual => "+=",
+        Op::SlashEqual => "/=",
+        Op::StarEqual => "*=",
+        Op::PercentEqual => "%=",
     }
 }
 
 impl Operator {
-    pub fn binary_from_combined(&self) -> Operator {
-        use Operator::*;
-        match self {
-            MinusEqual => Minus,
-            PlusEqual => Plus,
-            SlashEqual => Slash,
-            StarEqual => Star,
-            PercentEqual => Percent,
-            a => panic!("{:?}", a),
-        }
+    pub fn binary_from_combined(&self) -> Option<Operator> {
+        use Operator as Op;
+        Some(match self {
+            Op::MinusEqual => Op::Minus,
+            Op::PlusEqual => Op::Plus,
+            Op::SlashEqual => Op::Slash,
+            Op::StarEqual => Op::Star,
+            Op::PercentEqual => Op::Percent,
+            _ => return None,
+        })
     }
 }
 
@@ -304,24 +305,24 @@ impl fmt::Display for Token {
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use TokenKind::*;
+        use TokenKind as Tk;
 
         match &self {
-            LeftParen => write!(f, "("),
-            RightParen => write!(f, ")"),
-            LeftBrace => write!(f, "{{"),
-            RightBrace => write!(f, "}}"),
-            LeftBracket => write!(f, "["),
-            RightBracket => write!(f, "]"),
+            Tk::LeftParen => write!(f, "("),
+            Tk::RightParen => write!(f, ")"),
+            Tk::LeftBrace => write!(f, "{{"),
+            Tk::RightBrace => write!(f, "}}"),
+            Tk::LeftBracket => write!(f, "["),
+            Tk::RightBracket => write!(f, "]"),
 
-            Op(op) => write!(f, "{}", op),
+            Tk::Op(op) => write!(f, "{}", op),
 
-            Number(num) => write!(f, "{}", num),
-            InvalidNumber => write!(f, "InvalidNumber"),
-            StaticString(sym) => write!(f, "StaticString#{:?}", sym),
-            UnfinishedString => write!(f, "UnfinishedString"),
-            Identifier(sym) => write!(f, "{}", crate::object::sym_to_str(sym)),
-            Reserved(word) => write!(f, "#{}", reserved_word_as_string(word)),
+            Tk::Number(num) => write!(f, "{}", num),
+            Tk::InvalidNumber => write!(f, "InvalidNumber"),
+            Tk::StaticString(sym) => write!(f, "StaticString#{:?}", sym),
+            Tk::UnfinishedString => write!(f, "UnfinishedString"),
+            Tk::Identifier(sym) => write!(f, "{}", crate::object::sym_to_str(sym)),
+            Tk::Reserved(word) => write!(f, "#{}", reserved_word_as_string(word)),
         }
     }
 }

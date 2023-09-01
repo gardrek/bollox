@@ -27,12 +27,10 @@ impl From<ParseError> for crate::result::Error {
 
 impl core::fmt::Display for ParseErrorKind {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        use ParseErrorKind::*;
-
         match self {
-            ExpectedIdentifier => write!(f, "Expected Identifier"),
-            ExpectedLeftBrace => write!(f, "Expected Starting Brace"),
-            ExpectedToken(expected, found) => {
+            ParseErrorKind::ExpectedIdentifier => write!(f, "Expected Identifier"),
+            ParseErrorKind::ExpectedLeftBrace => write!(f, "Expected Starting Brace"),
+            ParseErrorKind::ExpectedToken(expected, found) => {
                 if expected.len() == 1 {
                     write!(f, "Expected `{}`, ", expected[0])?;
                 } else {
@@ -47,16 +45,16 @@ impl core::fmt::Display for ParseErrorKind {
                     Some(token) => write!(f, "found `{}`", token),
                 }
             }
-            Ice(s) => write!(f, "Internal Compiler Error: {}", s),
-            MaxArgumentsExceeded => write!(
+            ParseErrorKind::Ice(s) => write!(f, "Internal Compiler Error: {}", s),
+            ParseErrorKind::MaxArgumentsExceeded => write!(
                 f,
                 "Max of {} function call arguments exceeded",
                 MAX_ARGUMENTS
             ),
-            UnexpectedToken(t) => write!(f, "Unexpected Token `{}`", t),
-            InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
-            ScannerError(e) => write!(f, "Scanner Error {}", e),
-            InvalidConstructor => write!(f, "Invalid Constructor"),
+            ParseErrorKind::UnexpectedToken(t) => write!(f, "Unexpected Token `{}`", t),
+            ParseErrorKind::InvalidAssignmentTarget => write!(f, "Invalid Assignment Target"),
+            ParseErrorKind::ScannerError(e) => write!(f, "Scanner Error {}", e),
+            ParseErrorKind::InvalidConstructor => write!(f, "Invalid Constructor"),
         }
     }
 }
@@ -71,7 +69,7 @@ pub struct ParseError {
 
 impl core::fmt::Display for ParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{} at {}", self.kind, self.location)
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -301,10 +299,18 @@ impl Parser {
                 }
             }
 
-            use ReservedWord::*;
             if let TokenKind::Reserved(keyword) = &token.kind {
                 match keyword {
-                    Class | Fun | Var | For | If | While | Print | Return | Break | Switch => break,
+                    ReservedWord::Class
+                    | ReservedWord::Fun
+                    | ReservedWord::Var
+                    | ReservedWord::For
+                    | ReservedWord::If
+                    | ReservedWord::While
+                    | ReservedWord::Print
+                    | ReservedWord::Return
+                    | ReservedWord::Break
+                    | ReservedWord::Switch => break,
                     _ => (),
                 }
             }
@@ -324,7 +330,6 @@ impl Parser {
         let mut location = expr.location.clone();
 
         while let Some(op_token) = self.check_advance(kinds) {
-            //~ let op_token = self.peek_previous().unwrap();
             location = location.combine(&op_token.location);
             let op = op_token.to_operator();
             let right = get_argument(self)?;
@@ -361,14 +366,11 @@ impl Parser {
             TokenKind::Reserved(ReservedWord::Const),
         ]) {
             match &token.kind {
-                TokenKind::Reserved(word) => {
-                    use ReservedWord::*;
-                    match word {
-                        Global => self.decorated_declaration(Some(deco.with_global())),
-                        Const => self.decorated_declaration(Some(deco.with_const())),
-                        _ => unreachable!(),
-                    }
-                }
+                TokenKind::Reserved(word) => match word {
+                    ReservedWord::Global => self.decorated_declaration(Some(deco.with_global())),
+                    ReservedWord::Const => self.decorated_declaration(Some(deco.with_const())),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             }
         } else if self.check(&[
@@ -408,15 +410,12 @@ impl Parser {
             TokenKind::Reserved(ReservedWord::Var),
         ]) {
             match &token.kind {
-                TokenKind::Reserved(word) => {
-                    use ReservedWord::*;
-                    match word {
-                        Class => self.class_declaration(deco),
-                        Fun => self.function_declaration(deco),
-                        Var => self.variable_declaration(deco),
-                        _ => unreachable!(),
-                    }
-                }
+                TokenKind::Reserved(word) => match word {
+                    ReservedWord::Class => self.class_declaration(deco),
+                    ReservedWord::Fun => self.function_declaration(deco),
+                    ReservedWord::Var => self.variable_declaration(deco),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             }
         } else {
@@ -548,19 +547,16 @@ impl Parser {
             TokenKind::Reserved(ReservedWord::While),
         ]) {
             match &token.kind {
-                TokenKind::Reserved(word) => {
-                    use ReservedWord::*;
-                    match word {
-                        Break => self.break_statement(),
-                        For => self.for_statement(),
-                        If => self.if_statement(),
-                        Print => self.print_statement(),
-                        Return => self.return_statement(),
-                        Switch => self.switch_statement(),
-                        While => self.while_statement(),
-                        _ => unreachable!(),
-                    }
-                }
+                TokenKind::Reserved(word) => match word {
+                    ReservedWord::Break => self.break_statement(),
+                    ReservedWord::For => self.for_statement(),
+                    ReservedWord::If => self.if_statement(),
+                    ReservedWord::Print => self.print_statement(),
+                    ReservedWord::Return => self.return_statement(),
+                    ReservedWord::Switch => self.switch_statement(),
+                    ReservedWord::While => self.while_statement(),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             }
         } else {
@@ -987,7 +983,10 @@ impl Parser {
                         location: expr.location.clone(),
                         kind: ExprKind::Binary(
                             Box::new(expr.clone()),
-                            a.binary_from_combined(),
+                            a.binary_from_combined()
+                                .ok_or(self.error(ParseErrorKind::Ice(
+                                    "not a combined assignment operator; internal scanner error",
+                                )))?,
                             value,
                         ),
                     }),

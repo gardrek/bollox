@@ -259,7 +259,15 @@ impl Scanner {
 
         let slice = self.source.get_slice(&location);
 
-        let value = slice.parse::<f64>().unwrap();
+        let value = match slice.parse::<f64>() {
+            Ok(v) => v,
+            Err(_) => {
+                return Token {
+                    location,
+                    kind: TokenKind::InvalidNumber,
+                }
+            }
+        };
 
         Token {
             location,
@@ -425,19 +433,19 @@ impl Scanner {
                 None => return Ok(self.do_eof()),
             };
 
-            use Operator::*;
-            use TokenKind::*;
+            use Operator as Op;
+            use TokenKind as Tk;
             match inner {
-                '(' => break self.static_token(LeftParen, 1),
-                ')' => break self.static_token(RightParen, 1),
-                '{' => break self.static_token(LeftBrace, 1),
-                '}' => break self.static_token(RightBrace, 1),
-                '[' => break self.static_token(LeftBracket, 1),
-                ']' => break self.static_token(RightBracket, 1),
-                ',' => break self.static_token(Op(Comma), 1),
-                '.' => break self.static_token(Op(Dot), 1),
-                '-' => break self.match_static_operator('=', MinusEqual, Minus, 1)?,
-                '+' => break self.match_static_operator('=', PlusEqual, Plus, 1)?,
+                '(' => break self.static_token(Tk::LeftParen, 1),
+                ')' => break self.static_token(Tk::RightParen, 1),
+                '{' => break self.static_token(Tk::LeftBrace, 1),
+                '}' => break self.static_token(Tk::RightBrace, 1),
+                '[' => break self.static_token(Tk::LeftBracket, 1),
+                ']' => break self.static_token(Tk::RightBracket, 1),
+                ',' => break self.static_token(Tk::Op(Op::Comma), 1),
+                '.' => break self.static_token(Tk::Op(Op::Dot), 1),
+                '-' => break self.match_static_operator('=', Op::MinusEqual, Op::Minus, 1)?,
+                '+' => break self.match_static_operator('=', Op::PlusEqual, Op::Plus, 1)?,
                 '/' => match self.peek_char() {
                     // no bytes left
                     None => return Ok(self.do_eof()),
@@ -453,18 +461,18 @@ impl Scanner {
                         }
                         '=' => {
                             self.cursor += 1;
-                            break self.static_token(Op(SlashEqual), 1);
+                            break self.static_token(Tk::Op(Op::SlashEqual), 1);
                         }
-                        _ => break self.static_token(Op(Slash), 1),
+                        _ => break self.static_token(Tk::Op(Op::Slash), 1),
                     },
                 },
-                '*' => break self.match_static_operator('=', StarEqual, Star, 1)?,
-                '%' => break self.match_static_operator('=', PercentEqual, Percent, 1)?,
-                '!' => break self.match_static_operator('=', BangEqual, Bang, 1)?,
-                '=' => break self.match_static_operator('=', EqualEqual, Equal, 1)?,
-                '>' => break self.match_static_operator('=', GreaterEqual, Greater, 1)?,
-                '<' => break self.match_static_operator('=', LessEqual, Less, 1)?,
-                ';' => break self.static_token(Op(Semicolon), 1),
+                '*' => break self.match_static_operator('=', Op::StarEqual, Op::Star, 1)?,
+                '%' => break self.match_static_operator('=', Op::PercentEqual, Op::Percent, 1)?,
+                '!' => break self.match_static_operator('=', Op::BangEqual, Op::Bang, 1)?,
+                '=' => break self.match_static_operator('=', Op::EqualEqual, Op::Equal, 1)?,
+                '>' => break self.match_static_operator('=', Op::GreaterEqual, Op::Greater, 1)?,
+                '<' => break self.match_static_operator('=', Op::LessEqual, Op::Less, 1)?,
+                ';' => break self.static_token(Tk::Op(Op::Semicolon), 1),
                 '"' => break self.string(),
                 ch if ch.is_whitespace() => {
                     continue;

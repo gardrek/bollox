@@ -35,11 +35,7 @@ lazy_static! {
         RwLock::new(DefaultStringInterner::new());
 }
 
-fn parse_and_resolve(
-    source: &str,
-    id: usize,
-    compatibility_mode: bool,
-) -> Result<Vec<ast::Stmt>> {
+fn parse_and_resolve(source: &str, id: usize, compatibility_mode: bool) -> Result<Vec<ast::Stmt>> {
     let mut parser = Parser::new(
         Scanner::new(source, SourceId(id), compatibility_mode),
         compatibility_mode,
@@ -51,15 +47,15 @@ fn parse_and_resolve(
 
     if had_error {
         for e in parser.errors().iter() {
-            eprintln!(
-                "error on line {:?}: {} `{}`",
-                crate::source::SourceLocation::error_line_number(
-                    &result::Error::Parser(e.clone()),
-                    source
-                ),
-                e,
-                e.get_slice(source),
-            )
+            let line = match crate::source::SourceLocation::error_line_number(
+                &result::Error::Parser(e.clone()),
+                source,
+            ) {
+                Some(n) => n.to_string(),
+                None => "unkown".to_string(),
+            };
+
+            eprintln!("error on line {}: {} at `{}`", line, e, e.get_slice(source),)
         }
 
         /*
@@ -109,21 +105,25 @@ pub fn run_string(
     interpret(&source, id, compatibility_mode, &mut interpreter)
 }
 
-
 pub fn interpret(
     source: &str,
     id: usize,
     compatibility_mode: bool,
     interpreter: &mut Interpreter,
 ) -> Result<Option<object::Object>> {
-    let statements = parse_and_resolve(&source, id, compatibility_mode)?;
+    let statements = parse_and_resolve(source, id, compatibility_mode)?;
 
     let obj = match interpreter.interpret_slice(&statements) {
         Ok(obj) => obj,
         Err(eor) => match eor {
             ControlFlow::RuntimeError(e) => {
                 let src = source::Source::new(source);
-                eprintln!("error on line {:?}", src.get_line_number(&e.location),);
+                eprintln!(
+                    "error on line {:?}: {} `{}`",
+                    src.get_line_number(&e.location),
+                    e,
+                    e.location.get_slice(&src.src[..]),
+                );
 
                 return Err(e.into());
             }

@@ -193,7 +193,7 @@ pub fn init_global_environment(env: &mut Environment) {
 
             Ok(Object::dynamic_string(
                 match obj {
-                    Nil => "Nil",
+                    Object::Nil => "Nil",
                     Boolean(_) => "Bool",
                     Number(_) => "Number",
                     String(_) => "String",
@@ -301,9 +301,7 @@ pub fn init_number_native_class(interpreter: &mut Interpreter) {
 
     //
 
-    interpreter
-        .native_classes
-        .insert(class_name, native_class);
+    interpreter.native_classes.insert(class_name, native_class);
 }
 
 pub fn init_string_native_class(interpreter: &mut Interpreter) {
@@ -387,9 +385,7 @@ pub fn init_string_native_class(interpreter: &mut Interpreter) {
 
     //
 
-    interpreter
-        .native_classes
-        .insert(class_name, native_class);
+    interpreter.native_classes.insert(class_name, native_class);
 }
 
 pub fn init_array_native_class(interpreter: &mut Interpreter) {
@@ -595,7 +591,5 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
 
     //
 
-    interpreter
-        .native_classes
-        .insert(class_name, native_class);
+    interpreter.native_classes.insert(class_name, native_class);
 }

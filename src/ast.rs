@@ -190,7 +190,7 @@ impl fmt::Display for ExprKind {
             PropertyAssign(obj, name, value) => {
                 write!(f, "(property-assign {} {:?} {})", obj, name, value)
             }
-            This => write!(f, "(this)"),
+            ExprKind::This => write!(f, "(this)"),
             Super(expr) => write!(f, "(super {:?})", expr),
             ArrayConstructor(exprs) => {
                 write!(f, "(array")?;

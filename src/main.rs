@@ -14,9 +14,11 @@ use source::SourceId;
 
 use bollox::GenericResult;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    run()?;
-    Ok(())
+fn main() -> Result<(), u8> {
+    match run() {
+        Ok(_) => Ok(()),
+        Err(_) => std::process::exit(1),
+    }
 }
 
 fn run() -> GenericResult {
@@ -84,6 +86,7 @@ fn run() -> GenericResult {
 
             let result = bollox::run_string(source.clone(), 0, clargs.compatibility);
 
+            /*
             if let Err(e) = &result {
                 eprintln!(
                     "error on line {:?}: `{}`",
@@ -94,6 +97,7 @@ fn run() -> GenericResult {
                     }
                 )
             }
+            */
 
             stdout.flush()?;
 
@@ -106,12 +110,6 @@ fn run() -> GenericResult {
 
     match &result {
         Ok(_o) => Ok(()),
-        Err(e) => {
-            match e.get_location() {
-                Some(loc) => eprintln!("{} at {}", e, loc),
-                _ => eprintln!("{:?}", e),
-            }
-            Ok(result?)
-        }
+        Err(_e) => Ok(result?),
     }
 }

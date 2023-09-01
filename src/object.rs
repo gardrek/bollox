@@ -185,10 +185,9 @@ impl Object {
     }
 
     pub fn is_truthy(&self) -> bool {
-        use Object::*;
         match self {
-            Nil => false,
-            Boolean(b) => *b,
+            Object::Nil => false,
+            Object::Boolean(b) => *b,
             _ => true,
         }
     }
@@ -212,7 +211,7 @@ impl PartialEq for Object {
         use Object::*;
         use StringKind::*;
         match (self, other) {
-            (Nil, Nil) => true,
+            (Object::Nil, Object::Nil) => true,
             (Boolean(a), Boolean(b)) => a == b,
             (Number(a), Number(b)) => a == b,
             (String(a_kind), String(b_kind)) => match (a_kind, b_kind) {
@@ -231,8 +230,8 @@ impl PartialEq for Object {
             (Array(rc_a), Array(rc_b)) => Rc::ptr_eq(rc_a, rc_b),
 
             #[allow(unreachable_patterns)]
-            (Nil, _)
-            | (_, Nil)
+            (Object::Nil, _)
+            | (_, Object::Nil)
             | (Boolean(_), _)
             | (_, Boolean(_))
             | (Number(_), _)
@@ -275,7 +274,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Object::*;
         match self {
-            Nil => write!(f, "nil"),
+            Object::Nil => write!(f, "nil"),
             Boolean(b) => write!(f, "{}", b),
             Number(n) => write!(f, "{}", n),
             String(kind) => write!(f, "{}", kind),
@@ -310,7 +309,7 @@ impl fmt::Debug for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Object::*;
         match self {
-            Nil => write!(f, "nil"),
+            Object::Nil => write!(f, "nil"),
             Boolean(b) => write!(f, "{:?}", b),
             Number(_n) => write!(f, "{}", self), // use the standard Display to print integers without the .0
             String(kind) => write!(f, "\"{}\"", kind),
