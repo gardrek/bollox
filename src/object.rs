@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::interpreter::ControlFlow;
 use crate::interpreter::Environment;
 use crate::interpreter::Interpreter;
+use crate::source::SourceLocation;
 use crate::token::{ReservedWord, Token, TokenKind};
 use crate::INTERNER;
 
@@ -155,7 +156,7 @@ pub struct LoxFunction {
 pub struct NativeFunction {
     pub name: &'static str,
     pub arity: usize,
-    pub func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
+    pub func: fn(&mut Interpreter, SourceLocation, Vec<Object>) -> Result<Object, ControlFlow>,
     pub closure: Option<Rc<RefCell<Environment>>>,
 }
 

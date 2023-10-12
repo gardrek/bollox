@@ -34,7 +34,7 @@ impl NativeClass {
         &mut self,
         name: &'static str,
         arity: usize,
-        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
+        func: fn(&mut Interpreter, SourceLocation, Vec<Object>) -> Result<Object, ControlFlow>,
     ) {
         let name_sym = {
             let mut interner = INTERNER.write().unwrap();
@@ -128,7 +128,7 @@ impl Environment {
         &mut self,
         name: &'static str,
         arity: usize,
-        func: fn(&mut Interpreter, Vec<Object>) -> Result<Object, ControlFlow>,
+        func: fn(&mut Interpreter, SourceLocation, Vec<Object>) -> Result<Object, ControlFlow>,
     ) {
         let sym_name = {
             let mut interner = INTERNER.write().unwrap();
@@ -460,7 +460,7 @@ impl Interpreter {
 
                     self.environment = call_environment;
 
-                    let ret = (f.func)(self, arguments);
+                    let ret = (f.func)(self, location.clone(), arguments);
 
                     self.environment = old_environment;
 
@@ -475,7 +475,7 @@ impl Interpreter {
                         },
                     })
                 }
-                None => (f.func)(self, arguments),
+                None => (f.func)(self, location, arguments),
             },
             LoxFunc(f) => {
                 let closure = &f.closure;

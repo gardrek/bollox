@@ -1,0 +1,69 @@
+fun is_even(num) {
+    // work with negative numbers
+    if (num < 0)
+        num = -num;
+
+    // avoid an infinite loop for infinities
+    if (num == 1 / 0)
+        return false;
+    // avoid an infinite loop for large numbers
+    else if (num > 9007199254740992)
+        return true;
+
+    while (num > 1) {
+        num = num - 2;
+    }
+
+    if (num == 0)
+        return true;
+    else
+        // nan and any non-integer fall through to false
+        return false;
+}
+
+print "true:";
+
+print is_even(2);
+print is_even(4);
+print is_even(6);
+print is_even(1000);
+print is_even(-2);
+print is_even(-4);
+
+print "";
+
+print "false:";
+
+print is_even(1);
+print is_even(3);
+print is_even(5);
+
+print "";
+
+print is_even(0.1);
+print is_even(5.1);
+print is_even(6.2);
+
+print "";
+
+print is_even(-1);
+print is_even(-3);
+print is_even(-5);
+
+print "";
+
+print is_even(-3.1);
+print is_even(-6.2);
+
+print "";
+
+print is_even(1 / 0);
+print is_even(-1 / 0);
+print is_even(0 / 0);
+
+print "mystery guest:";
+
+var int = 9500000000000001;
+
+print is_even(int);
+//print is_even(9007199254740992); // unsure if infinite loop or just takes an incredibly long time

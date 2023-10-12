@@ -15,7 +15,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "clock",
         0,
-        |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             use std::time::{SystemTime, UNIX_EPOCH};
 
             Ok(Object::Number(
@@ -31,7 +34,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "read",
         0,
-        |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             use std::io::{self, BufRead};
 
             let mut line = String::new();
@@ -46,7 +52,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "to_string",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             let s = format!("{}", obj);
@@ -58,7 +67,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "to_number",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             Ok(match obj {
@@ -75,7 +87,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "getc",
         0,
-        |_interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             use std::io::Read;
             match std::io::stdin().bytes().next() {
                 Some(r) => match r {
@@ -90,7 +105,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "putc",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             use std::io::Write;
@@ -113,7 +131,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "chr",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             Ok(match obj {
@@ -128,7 +149,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "exit",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             match obj {
@@ -141,7 +165,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "print_error",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let message = &args[0];
 
             eprintln!("{}", message);
@@ -153,7 +180,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "require",
         1,
-        |interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let filename_obj = &args[0];
 
             match filename_obj {
@@ -186,7 +216,10 @@ pub fn init_global_environment(env: &mut Environment) {
     env.define_native_function(
         "typeof",
         1,
-        |_interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |_interpreter: &mut Interpreter,
+         _location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             use Object::*;
@@ -231,12 +264,15 @@ pub fn init_number_native_class(interpreter: &mut Interpreter) {
 
     let mut native_class = NativeClass::default();
 
-    // number.round()
+    // Number.round()
 
     native_class.add_method(
         "round",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -245,31 +281,28 @@ pub fn init_number_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
             match this {
                 Object::Number(n) => Ok(Object::Number(n.round())),
-                _ => Err(RuntimeError::ice(
-                    "`this` not a string for string method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not a string for string method", location).into())
+                }
             }
         },
     );
 
-    // number.to_number()
+    // Number.to_number()
 
     native_class.add_method(
         "to_number",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -278,11 +311,7 @@ pub fn init_number_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
@@ -291,7 +320,7 @@ pub fn init_number_native_class(interpreter: &mut Interpreter) {
                 _ => {
                     return Err(RuntimeError::ice(
                         "`this` not a string for string method",
-                        SourceLocation::bullshit(),
+                        location,
                     )
                     .into())
                 }
@@ -312,12 +341,15 @@ pub fn init_string_native_class(interpreter: &mut Interpreter) {
 
     let mut native_class = NativeClass::default();
 
-    // string.len()
+    // String.len()
 
     native_class.add_method(
         "len",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -326,31 +358,28 @@ pub fn init_string_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
             match this {
                 Object::String(s) => Ok(Object::Number(s.to_string().len() as f64)),
-                _ => Err(RuntimeError::ice(
-                    "`this` not a string for string method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not a string for string method", location).into())
+                }
             }
         },
     );
 
-    // string.to_number()
+    // String.to_number()
 
     native_class.add_method(
         "to_number",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -359,11 +388,7 @@ pub fn init_string_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
@@ -375,7 +400,7 @@ pub fn init_string_native_class(interpreter: &mut Interpreter) {
                 _ => {
                     return Err(RuntimeError::ice(
                         "`this` not a string for string method",
-                        SourceLocation::bullshit(),
+                        location,
                     )
                     .into())
                 }
@@ -401,7 +426,10 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
     native_class.add_method(
         "len",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -410,21 +438,15 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
             match this {
                 Object::Array(v) => Ok(Object::Number(v.borrow().len() as f64)),
-                _ => Err(RuntimeError::ice(
-                    "`this` not an array for array method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not an array for array method", location).into())
+                }
             }
         },
     );
@@ -434,7 +456,10 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
     native_class.add_method(
         "push",
         1,
-        |interpreter: &mut Interpreter, args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let obj = &args[0];
 
             let this_name = {
@@ -445,11 +470,7 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
@@ -458,11 +479,9 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
                     v.borrow_mut().push(obj.clone());
                     Ok(Object::nil())
                 }
-                _ => Err(RuntimeError::ice(
-                    "`this` not an array for array method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not an array for array method", location).into())
+                }
             }
         },
     );
@@ -472,7 +491,10 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
     native_class.add_method(
         "pop",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -481,11 +503,7 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
@@ -494,11 +512,9 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
                     Some(o) => o,
                     None => Object::nil(),
                 }),
-                _ => Err(RuntimeError::ice(
-                    "`this` not an array for array method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not an array for array method", location).into())
+                }
             }
         },
     );
@@ -508,7 +524,10 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
     native_class.add_method(
         "clone",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -517,21 +536,15 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
             match this {
                 Object::Array(v) => Ok(Object::Array(Rc::new(RefCell::new(v.borrow().clone())))),
-                _ => Err(RuntimeError::ice(
-                    "`this` not an array for array method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not an array for array method", location).into())
+                }
             }
         },
     );
@@ -541,7 +554,10 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
     native_class.add_method(
         "bytes_to_str",
         0,
-        |interpreter: &mut Interpreter, _args: Vec<Object>| -> Result<Object, ControlFlow> {
+        |interpreter: &mut Interpreter,
+         location: SourceLocation,
+         _args: Vec<Object>|
+         -> Result<Object, ControlFlow> {
             let this_name = {
                 let mut interner = INTERNER.write().unwrap();
                 interner.get_or_intern("this")
@@ -550,11 +566,7 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
             let this = match interpreter.get_binding(&this_name) {
                 Some(o) => o,
                 None => {
-                    return Err(RuntimeError::ice(
-                        "`this` not defined for method",
-                        SourceLocation::bullshit(),
-                    )
-                    .into())
+                    return Err(RuntimeError::ice("`this` not defined for method", location).into())
                 }
             };
 
@@ -580,11 +592,9 @@ pub fn init_array_native_class(interpreter: &mut Interpreter) {
                         _ => Ok(Object::Nil),
                     }
                 }
-                _ => Err(RuntimeError::ice(
-                    "`this` not an array for array method",
-                    SourceLocation::bullshit(),
-                )
-                .into()),
+                _ => {
+                    Err(RuntimeError::ice("`this` not an array for array method", location).into())
+                }
             }
         },
     );
