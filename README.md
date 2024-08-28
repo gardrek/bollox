@@ -151,7 +151,7 @@ Many error messages are quite different. Errors are not currently in the best sh
 
 - `print_error(message)` - Print message string on stderr.
 
-- `typeof(obj)` - Returns a string describing the built-in type of any object `obj`. Returns one of "Nil", "Boolean", "Number", "String", "NativeFunction", "Function", "Class", or "Array".
+- `typeof(obj)` - Returns a string describing the built-in type of any object `obj`. Returns one of "Nil", "Boolean", "Number", "String", "NativeFunction", "Function", "Class", "Instance", or "Array".
 
 
 
