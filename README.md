@@ -14,7 +14,7 @@
 
 # Differences compared to standard Lox #
 
-One important thing to note: bollox is not fully garbage collected. It uses reference counting with *no* cycle detection, so if you create a reference cycle, than memory can and will be leaked.
+One important thing to note: bollox is not fully garbage collected. It uses reference counting with *no* cycle detection, so if you create a reference cycle, that memory can and will be leaked.
 
 Strings support many of the same escape sequences as Rust:
 - `\n` - new line
@@ -67,7 +67,7 @@ switch input {
         stack.push(a);
         stack.push(a);
     }
-    "pop" => {
+    "pop" {
         stack.pop();
     }
     "add", "+" {
